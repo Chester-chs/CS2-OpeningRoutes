@@ -1,0 +1,27 @@
+# Operating-system metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Editor swap and backup files
+*.swp
+*.swo
+*~
+*.bak
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+
+# Local environment variables and secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+*.key
+*.pem
+*.p12
+*.pfx
