@@ -47,13 +47,16 @@ def export_bundle(store: Store, output: Path) -> Path:
     try:
         for row in rounds:
             timeline = store.timeline(row["id"])
+            if timeline is None:
+                raise ValueError("A selected round has no timeline; reimport its demo before exporting")
             if timeline:
                 directory = staging / "timelines"
                 directory.mkdir(exist_ok=True)
                 (directory / f"{row['id']}.json").write_text(json.dumps(timeline), encoding="utf-8")
-        for t in throws:
+        media_refs = [t["teaching"] for t in throws] + [r.get("review", {}) for r in rounds]
+        for refs in media_refs:
             for key in ("stance_image", "aim_image", "pro_video", "recreation_video"):
-                asset = t["teaching"].get(key, "")
+                asset = refs.get(key, "")
                 if asset.startswith("media/"):
                     original = (store.root / asset).resolve()
                     if (

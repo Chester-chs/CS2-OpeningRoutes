@@ -45,6 +45,7 @@ class Teaching(BaseModel):
     verified_on: str = Field(default="", max_length=30)
     map_version: str = Field(default="", max_length=100)
     video_offset: float = Field(default=0, ge=0, le=86400)
+    verification_confirmed: bool = False
     status: Literal["draft", "review", "published", "withdrawn"] = "draft"
 
     @field_validator("stance_image", "aim_image", "pro_video", "recreation_video")

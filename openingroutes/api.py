@@ -5,9 +5,10 @@ import secrets
 import shutil
 import subprocess
 import sys
-from typing import Annotated
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Annotated
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -56,11 +57,29 @@ class Plan(BaseModel):
 
 
 def create_app(root: Path, *, testing=False, web_root: Path | None = None):
+    root = Path(root).resolve()
     store = Store(root)
-    app = FastAPI(title="OpeningRoutes", docs_url=None, redoc_url=None, openapi_url=None)
-    app.state.store = store
     token = secrets.token_urlsafe(32)
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="demo-worker")
+    processes = {}
+    cancelled = set()
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        yield
+        for key, process in list(processes.items()):
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)
+            job = store.all("jobs")[key]
+            if job["status"] in ("queued", "parsing"):
+                store.put(
+                    "jobs", key, {**job, "status": "interrupted", "error": "Application closed during import"}
+                )
+        executor.shutdown(wait=False, cancel_futures=True)
+
+    app = FastAPI(title="OpeningRoutes", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+    app.state.store = store
     for job in store.all("jobs").values():
         if job["status"] in ("queued", "parsing"):
             store.put(
@@ -124,6 +143,8 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
         return sorted(store.all("jobs").values(), key=lambda x: x["created_at"], reverse=True)
 
     def run_import(job_id):
+        if job_id in cancelled:
+            return
         command = (
             [sys.executable, "--worker"]
             if getattr(sys, "frozen", False)
@@ -131,14 +152,20 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
         )
         try:
             with (root / "logs" / f"{job_id}.log").open("w", encoding="utf-8") as log:
-                result = subprocess.run(
+                process = subprocess.Popen(
                     [*command, str(root), job_id],
-                    timeout=600,
                     stdout=log,
                     stderr=log,
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 )
-            if result.returncode:
+                processes[job_id] = process
+                if job_id in cancelled and process.poll() is None:
+                    process.terminate()
+                returncode = process.wait(timeout=600)
+            if job_id in cancelled:
+                job = store.all("jobs")[job_id]
+                store.put("jobs", job_id, {**job, "status": "cancelled", "stage": "cancelled"})
+            elif returncode:
                 job = store.all("jobs")[job_id]
                 store.put(
                     "jobs",
@@ -146,6 +173,8 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
                     {**job, "status": "failed", "error": "Demo parsing failed. Check the local task log."},
                 )
         except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
             job = store.all("jobs")[job_id]
             store.put(
                 "jobs",
@@ -156,6 +185,28 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
                     "error": "Parsing exceeded the 10 minute limit. Retry or use a smaller demo.",
                 },
             )
+        except OSError:
+            job = store.all("jobs")[job_id]
+            store.put(
+                "jobs", job_id, {**job, "status": "failed", "error": "Could not start the parser process"}
+            )
+        finally:
+            processes.pop(job_id, None)
+
+    @app.post("/api/jobs/{job_id}/cancel")
+    def cancel_job(job_id: str):
+        job = store.all("jobs").get(job_id)
+        if not job:
+            raise HTTPException(404, "Import task not found")
+        if job["status"] not in ("queued", "parsing"):
+            raise HTTPException(409, "This task is no longer running")
+        cancelled.add(job_id)
+        process = processes.get(job_id)
+        if process and process.poll() is None:
+            process.terminate()
+        job.update(status="cancelled", stage="cancelled", error=None)
+        store.put("jobs", job_id, job)
+        return job
 
     @app.post("/api/import", status_code=202)
     async def import_demo(demo: Annotated[UploadFile, File()], source: Annotated[str, Form()]):
@@ -206,6 +257,26 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
             raise HTTPException(404, "Throw not found")
         match = find("matches", row["match_id"])
         data = teaching.model_dump()
+        confirmed = data.pop("verification_confirmed")
+        previous = store.all("teachings").get(throw_id, {})
+        action_fields = (
+            "stance",
+            "aim",
+            "operation",
+            "timing",
+            "prerequisites",
+            "effect",
+            "coordination",
+            "stance_image",
+            "aim_image",
+            "map_version",
+        )
+        if (
+            previous.get("reproduction") == "verified"
+            and not confirmed
+            and any(data.get(key) != previous.get(key) for key in action_fields)
+        ):
+            data["reproduction"] = "pending"
         gaps = teaching_gaps(data, source_verified=match["source"]["verified"])
         for key in ("stance_image", "aim_image", "pro_video", "recreation_video"):
             asset = data.get(key, "")

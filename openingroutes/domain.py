@@ -30,7 +30,10 @@ def safe_url(value: str) -> bool:
         return False
     if value.startswith("media/"):
         return ".." not in PurePosixPath(value).parts and "%" not in value and ":" not in value
-    parsed = urlsplit(value)
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return False
     return parsed.scheme == "https" and bool(parsed.hostname) and not parsed.username and not parsed.password
 
 

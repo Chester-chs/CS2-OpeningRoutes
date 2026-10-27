@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import socket
 import sys
@@ -9,6 +10,7 @@ from pathlib import Path
 import uvicorn
 
 from .api import create_app
+from .store import Store
 
 
 def main():
@@ -18,7 +20,12 @@ def main():
     )
     args.add_argument("--port", type=int, default=8765)
     args.add_argument("--data", type=Path)
+    args.add_argument(
+        "--smoke-test", action="store_true", help="Verify the native WebView without showing a window"
+    )
     options = args.parse_args()
+    if not 1024 <= options.port <= 65535:
+        args.error("Port must be between 1024 and 65535")
     if options.data:
         root = options.data.resolve()
     elif getattr(sys, "frozen", False):
@@ -29,6 +36,15 @@ def main():
     web = bundle / ("web" if getattr(sys, "frozen", False) else "web/dist")
     if not (web / "index.html").exists():
         raise SystemExit("Web assets are missing. Run npm ci and npm run build in web/ first.")
+    seed = bundle / "seed"
+    if not (root / "library.sqlite").exists() and (seed / "matches.json").exists():
+        import shutil
+
+        store = Store(root)
+        for match in json.loads((seed / "matches.json").read_text(encoding="utf-8")):
+            store.save_match(match)
+        if (seed / "timelines").is_dir():
+            shutil.copytree(seed / "timelines", root / "timelines", dirs_exist_ok=True)
     app = create_app(root, web_root=web)
     if options.browser:
         uvicorn.run(app, host="127.0.0.1", port=options.port, log_level="warning")
@@ -36,8 +52,13 @@ def main():
     import webview
 
     with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
+        try:
+            probe.bind(("127.0.0.1", options.port))
+        except OSError as error:
+            raise SystemExit(
+                "OpeningRoutes port is already in use. Close the other local instance."
+            ) from error
+        port = options.port
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
@@ -47,16 +68,38 @@ def main():
         time.sleep(0.05)
     else:
         raise SystemExit("Local service did not start.")
-    webview.create_window(
+    window = webview.create_window(
         "OpeningRoutes",
         f"http://127.0.0.1:{port}",
         width=1440,
         height=960,
         min_size=(900, 650),
         text_select=True,
+        hidden=options.smoke_test,
     )
+    if options.smoke_test:
+
+        def verify_window():
+            result = {"native_webview": False}
+            try:
+                for _ in range(100):
+                    ready = window.evaluate_js("document.querySelector('[data-ready=\"true\"]') !== null")
+                    if ready:
+                        break
+                    time.sleep(0.1)
+                result = {
+                    "native_webview": bool(ready),
+                    "title": window.evaluate_js("document.title"),
+                    "heading": window.evaluate_js("document.querySelector('h1')?.textContent"),
+                }
+            except Exception as error:
+                result["error"] = str(error)
+            (root / "desktop-smoke.json").write_text(json.dumps(result), encoding="utf-8")
+            window.destroy()
+
+        window.events.loaded += verify_window
     try:
-        webview.start(gui="edgechromium", debug=False)
+        webview.start(gui="edgechromium", debug=False, private_mode=False, storage_path=str(root / "webview"))
     finally:
         server.should_exit = True
         thread.join(timeout=5)
