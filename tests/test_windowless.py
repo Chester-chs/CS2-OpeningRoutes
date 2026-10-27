@@ -9,5 +9,9 @@ def test_packaged_browser_mode_starts_without_console_streams(tmp_path, monkeypa
     (tmp_path / "web/dist/index.html").write_text("test")
     monkeypatch.setattr(desktop, "__file__", str(tmp_path / "openingroutes/desktop.py"))
     monkeypatch.setattr(sys, "argv", ["launch.py", "--browser", "--data", str(tmp_path / "data")])
-    with patch("uvicorn.Server.run"), patch.object(sys, "stdout", None), patch.object(sys, "stderr", None):
+    with (
+        patch("uvicorn.Server.run", lambda server: setattr(server, "started", True)),
+        patch.object(sys, "stdout", None),
+        patch.object(sys, "stderr", None),
+    ):
         desktop.main()
