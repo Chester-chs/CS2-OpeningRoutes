@@ -4,11 +4,13 @@
 
 **Learn CS2 openings from professional matches: T/CT map control and utility counters, pistol-round play, and professional-player demonstrations.**
 
-OpeningRoutes is a planned CS2 learning tool for players who want to study professional play systematically. It will organize routes, utility, team coordination, and footage from professional-event demos into searchable learning cases, with a desktop application and a functional web edition.
+OpeningRoutes is a CS2 learning tool in development for players who want to study professional play systematically. It extracts routes and utility from professional-event demos and combines match evidence with verified instruction, with a Windows application and a functional web edition.
 
-> **Status: planning stage. No usable release is available yet.** The features below are development goals; there is currently no application download or live web experience.
+> **Status: v0.1.0 local development preview.** Real demo extraction, utility search, full-round routes, independent pistol-round study, teaching curation and reviewed-content export are implemented. Complete tutorials require match footage, visual instructions and in-game reproduction; extracted records are not presented as verified tutorials. No public release download or hosted service is available yet.
 
-## Core features — planned
+See the [usage guide (Chinese)](docs/usage.zh-CN.md) for running the application, importing demos, curating instruction and preparing web content. The scope below includes implemented foundations and content goals still being developed.
+
+## Core features and content goals
 
 ### T/CT opening control and utility counters
 

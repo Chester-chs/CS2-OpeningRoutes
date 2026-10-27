@@ -40,6 +40,7 @@ $RECYCLE.BIN/
 /web/dist/
 /web/playwright-report/
 /web/test-results/
+/web/coverage/
 *.dem
 *.rar
 *.parquet

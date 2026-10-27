@@ -205,14 +205,19 @@ def test_worker_persists_complete_and_failure(tmp_path):
 
 def test_editing_verified_actions_requires_explicit_reverification(tmp_path):
     store = seed(tmp_path)
-    complete = {key:'Confirmed' for key in TEACHING_FIELDS}
-    complete.update(stance_image='https://example.org/s.png',aim_image='https://example.org/a.png',
-                    pro_video='https://example.org/v.mp4',reproduction='verified',status='published')
-    store.save_teaching('t1', complete)
-    c=TestClient(create_app(tmp_path,testing=True))
-    changed={**complete,'operation':'Changed instructions'}
-    rejected=c.put('/api/teachings/t1',headers=auth(c),json=changed)
+    complete = {key: "Confirmed" for key in TEACHING_FIELDS}
+    complete.update(
+        stance_image="https://example.org/s.png",
+        aim_image="https://example.org/a.png",
+        pro_video="https://example.org/v.mp4",
+        reproduction="verified",
+        status="published",
+    )
+    store.save_teaching("t1", complete)
+    c = TestClient(create_app(tmp_path, testing=True))
+    changed = {**complete, "operation": "Changed instructions"}
+    rejected = c.put("/api/teachings/t1", headers=auth(c), json=changed)
     assert rejected.status_code == 422
-    assert 'reproduction' in rejected.json()['detail']['gaps']
-    accepted=c.put('/api/teachings/t1',headers=auth(c),json={**changed,'verification_confirmed':True})
+    assert "reproduction" in rejected.json()["detail"]["gaps"]
+    accepted = c.put("/api/teachings/t1", headers=auth(c), json={**changed, "verification_confirmed": True})
     assert accepted.status_code == 200
