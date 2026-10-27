@@ -47,7 +47,7 @@ def main():
             shutil.copytree(seed / "timelines", root / "timelines", dirs_exist_ok=True)
     app = create_app(root, web_root=web)
     if options.browser:
-        uvicorn.run(app, host="127.0.0.1", port=options.port, log_level="warning")
+        uvicorn.run(app, host="127.0.0.1", port=options.port, log_level="warning", use_colors=False)
         return
     import webview
 
