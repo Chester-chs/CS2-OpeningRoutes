@@ -269,7 +269,7 @@ export default function App() {
                 ? "网页版 · 本地提取记录预览"
                 : "网页版 · 已审核内容"}
           </span>
-          <small>v0.1.0 {client.version && `/ ${client.version}`}</small>
+          <small>v0.2.0 {client.version && `/ ${client.version}`}</small>
         </div>
       </aside>
       <div className="workspace">

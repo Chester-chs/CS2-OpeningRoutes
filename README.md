@@ -6,7 +6,7 @@
 
 OpeningRoutes is a CS2 learning tool in development for players who want to study professional play systematically. It extracts routes and utility from professional-event demos and combines match evidence with verified instruction, with a Windows application and a functional web edition.
 
-> **Status: v0.1.0 local development preview.** Real demo extraction, utility search, full-round routes, independent pistol-round study, teaching curation and reviewed-content export are implemented. Complete tutorials require match footage, visual instructions and in-game reproduction; extracted records are not presented as verified tutorials. No public release download or hosted service is available yet.
+> **Status: v0.2.0 local development preview.** Real demo extraction, area-based utility search, lineup variants with manual merge/split, full-round routes, independent pistol-round study with abnormal-round review, teaching curation and reviewed-content export are implemented. Complete tutorials require match footage, visual instructions and in-game reproduction; extracted records are not presented as verified tutorials. No public release download or hosted service is available yet.
 
 See the [usage guide (Chinese)](docs/usage.zh-CN.md) for running the application, importing demos, curating instruction and preparing web content. The scope below includes implemented foundations and content goals still being developed.
 

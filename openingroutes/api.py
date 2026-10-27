@@ -150,7 +150,7 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
 
     @app.get("/api/session")
     def session():
-        return {"token": token, "mode": "desktop", "version": "0.1.0"}
+        return {"token": token, "mode": "desktop", "version": "0.2.0"}
 
     @app.get("/api/catalog")
     def catalog():

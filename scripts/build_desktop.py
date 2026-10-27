@@ -60,11 +60,12 @@ def main():
     subprocess.run(command, check=True, cwd=ROOT)
     target = ROOT / "artifacts/desktop/OpeningRoutes"
     (target / "使用说明.txt").write_text(
-        "OpeningRoutes v0.1.0 本地预览\n\n双击 OpeningRoutes.exe 启动。\n"
+        "OpeningRoutes v0.2.0 本地预览\n\n双击 OpeningRoutes.exe 启动。\n"
         "数据保存在 %LOCALAPPDATA%\\OpeningRoutes；请备份整个目录。\n"
         "附带的职业比赛投掷是提取记录，教学仍需补齐原片、图示及游戏内复现。\n"
         "从“数据与内容管理”导入新 Demo，在道具详情中整理教学。\n"
         "手枪局有独立入口，可查看装备、全回合路线和结果。\n"
+        "区域、投法变体与异常回合复核在“数据与内容管理”和道具详情中。\n"
         "本版本不自动录制游戏，不代表已有通过复现核验的完整教程。\n",
         encoding="utf-8",
     )

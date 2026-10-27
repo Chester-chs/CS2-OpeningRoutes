@@ -97,10 +97,10 @@ def test_export_does_not_publish_drafts_or_local_notes(tmp_path):
     exported = export_bundle(store, tmp_path / "export")
     manifest = json.loads((exported / "manifest.json").read_text())
     assert manifest["schema_version"] == 1
-    catalog = json.loads((exported / "catalog.json").read_text())
+    catalog = json.loads((exported / "catalog.json").read_text(encoding="utf-8"))
     assert catalog["throws"] == []
     assert catalog["rounds"] == []
-    assert "Private draft" not in (exported / "catalog.json").read_text()
+    assert "Private draft" not in (exported / "catalog.json").read_text(encoding="utf-8")
 
 
 def test_complete_tutorial_export_copies_only_owned_referenced_media(tmp_path):
@@ -122,9 +122,9 @@ def test_complete_tutorial_export_copies_only_owned_referenced_media(tmp_path):
     from openingroutes.publish import export_bundle
 
     exported = export_bundle(store, tmp_path / "export")
-    catalog = json.loads((exported / "catalog.json").read_text())
+    catalog = json.loads((exported / "catalog.json").read_text(encoding="utf-8"))
     assert len(catalog["throws"]) == 1
     assert len(catalog["rounds"]) == 1
     assert (exported / "media/stance.png").exists()
     assert not (exported / "media/private.png").exists()
-    assert str(Path(tmp_path)) not in (exported / "catalog.json").read_text()
+    assert str(Path(tmp_path)) not in (exported / "catalog.json").read_text(encoding="utf-8")
