@@ -17,6 +17,7 @@ import {
   Video,
 } from "lucide-react";
 import {
+  areaOptions,
   DataClient,
   EMPTY,
   filterThrows,
@@ -485,7 +486,12 @@ export default function App() {
             </>
           )}
           {page === "manage" ? (
-            <Manage client={client} catalog={catalog} onRefresh={refresh} />
+            <Manage
+              client={client}
+              catalog={catalog}
+              onRefresh={refresh}
+              onOpenRound={(id) => setDetail({ id, kind: "round" })}
+            />
           ) : page === "plans" ? (
             <Plans
               client={client}
@@ -525,6 +531,17 @@ export default function App() {
                         value={filters.kind}
                         options={Object.entries(kindNames)}
                         change={(v) => update("kind", v)}
+                      />
+                    )}
+                    {!isRounds && (
+                      <Select
+                        label="区域"
+                        value={filters.area}
+                        options={areaOptions(catalog, filters.map).map((a) => [
+                          a,
+                          a,
+                        ])}
+                        change={(v) => update("area", v)}
                       />
                     )}
                     <Select
@@ -701,6 +718,15 @@ export default function App() {
                       收起对比
                     </button>
                   </div>
+                  <CompareVariants
+                    ids={compare}
+                    catalog={catalog}
+                    canEdit={client.mode === "desktop"}
+                    merge={async (ids) => {
+                      await client.write("variants/merge", "POST", { ids });
+                      refresh();
+                    }}
+                  />
                   <div className="comparison">
                     {compare.map((id) => {
                       const t = catalog.throws.find((v) => v.id === id)!;
@@ -847,6 +873,7 @@ export default function App() {
           client={client}
           onClose={() => setDetail(null)}
           onSaved={refresh}
+          onOpen={(id) => setDetail({ id, kind: "throw" })}
           favorites={favorites}
           toggleFavorite={toggleFavorite}
         />
@@ -899,6 +926,50 @@ function Stat({
       <strong>{value.toLocaleString()}</strong>
       <small>{detail}</small>
     </div>
+  );
+}
+function CompareVariants({
+  ids,
+  catalog,
+  canEdit,
+  merge,
+}: {
+  ids: string[];
+  catalog: Catalog;
+  canEdit: boolean;
+  merge: (ids: string[]) => Promise<void>;
+}) {
+  const [message, setMessage] = useState("");
+  const rows = ids.map((id) => catalog.throws.find((t) => t.id === id));
+  const variantIds = rows.map((t) => t?.variant_id || "");
+  const same = variantIds[0] && variantIds[0] === variantIds[1];
+  const mergeable =
+    !same &&
+    variantIds.every(Boolean) &&
+    rows[0]?.map === rows[1]?.map &&
+    rows[0]?.kind === rows[1]?.kind &&
+    rows[0]?.side === rows[1]?.side;
+  return (
+    <p className="variant-line">
+      {same
+        ? "两条记录属于同一投法变体。"
+        : "两条记录目前属于不同投法变体（自动归组只作候选）。"}
+      {canEdit && mergeable && (
+        <button
+          className="text-button"
+          onClick={() =>
+            void merge(variantIds)
+              .then(() =>
+                setMessage("已合并为同一投法，请在详情中补充名称并复核。"),
+              )
+              .catch((e) => setMessage(e.message))
+          }
+        >
+          合并为同一投法
+        </button>
+      )}
+      {message && <span role="status"> {message}</span>}
+    </p>
   );
 }
 function ThrowCard({ row: t, onOpen }: { row: Throw; onOpen: () => void }) {
@@ -957,7 +1028,11 @@ function ThrowCard({ row: t, onOpen }: { row: Throw; onOpen: () => void }) {
           {t.teaching.title || `${t.player} · ${kindNames[t.kind] || t.kind}`}
         </h3>
         <p>
-          {t.teaching.area || "区域待整理"} <span>· {t.team || t.side}</span>
+          {t.teaching.area ||
+            (t.origin_area
+              ? `${t.origin_area} → ${t.effect_area || "落点区域未知"}`
+              : "区域待整理")}{" "}
+          <span>· {t.team || t.side}</span>
         </p>
         <div className="card-bottom">
           <span>{t.player}</span>

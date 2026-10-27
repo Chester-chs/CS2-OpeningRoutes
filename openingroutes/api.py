@@ -8,7 +8,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 from uuid import uuid4
 
@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .domain import safe_url, teaching_gaps
 from .models import Source, Teaching
+from .places import valid_place
 from .publish import export_bundle
 from .store import Store, now
 
@@ -32,6 +33,32 @@ class RoundReview(BaseModel):
     pro_video: str = Field(default="", max_length=1000)
     description: str = Field(default="", max_length=4000)
     reviewer: str = Field(default="", max_length=100)
+    resolution: Literal["", "confirmed", "excluded"] = ""
+    resolution_note: str = Field(default="", max_length=2000)
+    pistol_override: bool | None = None
+
+
+class VariantIds(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ids: list[str] = Field(min_length=2, max_length=50)
+
+
+class VariantSplit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    throw_ids: list[str] = Field(min_length=1, max_length=500)
+
+
+class VariantMeta(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    title: str = Field(default="", max_length=200)
+    purpose: str = Field(default="", max_length=2000)
+    reviewed: bool = False
+    reviewer: str = Field(default="", max_length=100)
+
+
+class PlaceLabel(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    label: str = Field(min_length=1, max_length=60)
 
 
 class Step(BaseModel):
@@ -300,21 +327,104 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
 
     @app.put("/api/rounds/{round_id}/review")
     def review_round(round_id: str, review: RoundReview):
-        r = find("rounds", round_id)
-        if not r:
+        raw = next(
+            (r for m in store.all("matches").values() for r in m["rounds"] if r["id"] == round_id), None
+        )
+        if not raw:
             raise HTTPException(404, "Round not found")
         if review.pro_video and not safe_url(review.pro_video):
             raise HTTPException(422, "Invalid video URL")
+        if review.resolution and (not review.resolution_note.strip() or not review.reviewer):
+            raise HTTPException(422, "A resolution needs a written basis and a reviewer")
+        if review.pistol_override is not None and review.resolution != "confirmed":
+            raise HTTPException(422, "Pistol corrections require a confirmed resolution")
+        unresolved = raw.get("review_required") and not review.resolution
         if review.approved and (
             not review.reviewer
             or not review.description
             or not review.pro_video
-            or not r.get("complete")
-            or r.get("review_required")
+            or not raw.get("complete")
+            or unresolved
+            or review.resolution == "excluded"
         ):
             raise HTTPException(422, "Round requires completed evidence and no unresolved round warnings")
         store.put("round_reviews", round_id, review.model_dump())
         return review
+
+    def variant_index():
+        data = store.catalog()
+        return data, {v["id"]: v for v in data["variants"]}
+
+    def stored_meta(variant):
+        return {k: variant.get(k) for k in ("title", "purpose", "reviewed", "reviewer")}
+
+    @app.post("/api/variants/merge")
+    def merge_variants(body: VariantIds):
+        _, variants = variant_index()
+        if any(i not in variants for i in body.ids) or len(set(body.ids)) != len(body.ids):
+            raise HTTPException(404, "Variant not found")
+        chosen = [variants[i] for i in body.ids]
+        if len({(v["map"], v["kind"], v["side"]) for v in chosen}) != 1:
+            raise HTTPException(409, "Only the same map, grenade type and side can be merged")
+        base = next((v for v in chosen if v.get("title")), chosen[0])
+        members = [m for v in chosen for m in v["members"]]
+        new_id = "v-" + uuid4().hex[:12]
+        for v in chosen:
+            store.delete("variants", v["id"])
+        record = {"id": new_id, "source": "manual", "members": members, **stored_meta(base)}
+        record["reviewed"] = False
+        store.put("variants", new_id, record)
+        return record
+
+    @app.post("/api/variants/{variant_id}/split")
+    def split_variant(variant_id: str, body: VariantSplit):
+        _, variants = variant_index()
+        variant = variants.get(variant_id)
+        if not variant:
+            raise HTTPException(404, "Variant not found")
+        moving = list(dict.fromkeys(body.throw_ids))
+        if any(t not in variant["members"] for t in moving) or len(moving) >= len(variant["members"]):
+            raise HTTPException(422, "Choose some, but not all, throws from this variant")
+        remaining = [m for m in variant["members"] if m not in moving]
+        meta = stored_meta(variant)
+        store.put(
+            "variants",
+            variant_id,
+            {"id": variant_id, "source": "manual", "members": remaining, **meta, "reviewed": False},
+        )
+        new_id = "v-" + uuid4().hex[:12]
+        record = {
+            "id": new_id,
+            "source": "manual",
+            "members": moving,
+            "title": "",
+            "purpose": "",
+            "reviewed": False,
+            "reviewer": "",
+        }
+        store.put("variants", new_id, record)
+        return record
+
+    @app.put("/api/variants/{variant_id}")
+    def label_variant(variant_id: str, body: VariantMeta):
+        _, variants = variant_index()
+        variant = variants.get(variant_id)
+        if not variant:
+            raise HTTPException(404, "Variant not found")
+        if body.reviewed and not body.reviewer:
+            raise HTTPException(422, "Reviewer required")
+        record = {"id": variant_id, "source": variant["source"], **body.model_dump()}
+        if variant["source"] == "manual":
+            record["members"] = variant["members"]
+        store.put("variants", variant_id, record)
+        return {**variant, **body.model_dump()}
+
+    @app.put("/api/places/{map_name}/{place}")
+    def label_place(map_name: str, place: str, body: PlaceLabel):
+        if not valid_place(map_name, place):
+            raise HTTPException(422, "Invalid map or place name")
+        store.put("places", f"{map_name}:{place}", {"label": body.label})
+        return {"map": map_name, "place": place, "label": body.label}
 
     @app.put("/api/plans/{plan_id}")
     def save_plan(plan_id: str, plan: Plan):

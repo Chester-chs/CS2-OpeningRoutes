@@ -95,3 +95,20 @@ def build_rounds(
         kept["review_required"] |= len(attempts) > 1
         result.append(kept)
     return sorted(result, key=lambda x: x["number"])
+
+
+def effective_round(row: dict, review: dict) -> dict:
+    """Apply a curator's resolution of an abnormal round without hiding the raw parse."""
+    result = {**row, "review": review, "excluded": False}
+    resolution = review.get("resolution") or ""
+    if resolution:
+        result["review_required"] = False
+        result["resolution"] = resolution
+    override = review.get("pistol_override")
+    if override is not None and resolution == "confirmed":
+        result["is_pistol"] = bool(override)
+        result["pistol_basis"] = f"manual: {review.get('resolution_note', '')}"
+    if resolution == "excluded":
+        result["excluded"] = True
+        result["is_pistol"] = False
+    return result

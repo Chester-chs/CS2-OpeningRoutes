@@ -28,6 +28,7 @@ def export_bundle(store: Store, output: Path) -> Path:
         if r["match_id"] in verified
         and r.get("review", {}).get("approved")
         and r.get("review", {}).get("pro_video")
+        and not r.get("excluded")
     )
     rounds = [r for r in catalog["rounds"] if r["id"] in round_ids]
     match_ids = {r["match_id"] for r in rounds}
@@ -66,7 +67,22 @@ def export_bundle(store: Store, output: Path) -> Path:
                         raise ValueError(f"Missing media asset: {key}")
                     (staging / "media").mkdir(exist_ok=True)
                     shutil.copyfile(original, staging / asset)
-        bundle = {"schema_version": 1, "matches": matches, "rounds": rounds, "throws": throws, "plans": plans}
+        variants = [
+            {**v, "members": [m for m in v["members"] if m in throw_ids]}
+            for v in catalog.get("variants", [])
+            if any(m in throw_ids for m in v["members"])
+        ]
+        used_maps = {m["map"] for m in matches}
+        places = {k: v for k, v in catalog.get("places", {}).items() if k in used_maps}
+        bundle = {
+            "schema_version": 1,
+            "matches": matches,
+            "rounds": rounds,
+            "throws": throws,
+            "plans": plans,
+            "variants": variants,
+            "places": places,
+        }
         (staging / "catalog.json").write_text(json.dumps(bundle, ensure_ascii=False), encoding="utf-8")
         checksums = {
             p.relative_to(staging).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()

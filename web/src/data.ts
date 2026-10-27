@@ -4,7 +4,9 @@ import type {
   Mode,
   Round,
   Teaching,
+  Throw,
   Timeline,
+  Variant,
 } from "./types";
 
 export const EMPTY: Catalog = {
@@ -13,6 +15,8 @@ export const EMPTY: Catalog = {
   rounds: [],
   throws: [],
   plans: [],
+  variants: [],
+  places: {},
 };
 export const kindNames: Record<string, string> = {
   smoke: "烟雾弹",
@@ -69,6 +73,10 @@ export function filterThrows(c: Catalog, f: Filters) {
       (!f.kind || t.kind === f.kind) &&
       (!f.player || t.player === f.player) &&
       (!f.team || t.team === f.team) &&
+      (!f.area ||
+        t.origin_area === f.area ||
+        t.effect_area === f.area ||
+        t.teaching.area === f.area) &&
       (!f.status ||
         (f.status === "complete" ? t.gaps.length === 0 : t.gaps.length > 0)) &&
       (!q ||
@@ -77,6 +85,10 @@ export function filterThrows(c: Catalog, f: Filters) {
           t.team,
           t.map,
           kindNames[t.kind],
+          t.origin_area,
+          t.effect_area,
+          t.origin_place,
+          t.effect_place,
           ...Object.values(t.teaching),
         ]
           .join(" ")
@@ -95,6 +107,7 @@ export function visibleRounds(c: Catalog, f: Filters, pistolOnly: boolean) {
     (r) =>
       ids.has(r.match_id) &&
       verified.has(r.match_id) &&
+      !r.excluded &&
       (!pistolOnly || r.is_pistol) &&
       (!f.result ||
         (f.side
@@ -118,6 +131,26 @@ export function visibleRounds(c: Catalog, f: Filters, pistolOnly: boolean) {
           .toLowerCase()
           .includes(q)),
   );
+}
+
+export function areaOptions(c: Catalog, map?: string) {
+  const names = new Set<string>();
+  for (const t of c.throws)
+    if (!map || t.map === map)
+      for (const value of [t.origin_area, t.effect_area, t.teaching.area])
+        if (typeof value === "string" && value) names.add(value);
+  return [...names].sort();
+}
+
+export function variantPeers(
+  c: Catalog,
+  row: Throw,
+): { variant: Variant | undefined; others: Throw[] } {
+  const variant = c.variants?.find((v) => v.id === row.variant_id);
+  if (!variant) return { variant, others: [] };
+  const members = new Set(variant.members);
+  const others = c.throws.filter((t) => t.id !== row.id && members.has(t.id));
+  return { variant, others };
 }
 
 export function pistolSummary(rounds: Round[], side?: string) {

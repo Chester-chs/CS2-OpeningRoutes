@@ -32,6 +32,12 @@ def test_real_professional_demo_extraction_and_duplicate_import(tmp_path):
     assert len({t["id"] for t in match["throws"]}) == len(match["throws"])
     assert any(t["time"] > 30 for t in match["throws"])
     assert all(t["trajectory"] for t in match["throws"])
+    assert all(t["origin_place"] for t in match["throws"])
+    placed = [t for t in match["throws"] if t["effect_place"]]
+    assert len(placed) > len(match["throws"]) // 2
+    assert all(t["effect_place_basis"]["distance"] <= 300 for t in placed)
+    variants = store.catalog()["variants"]
+    assert any(len(v["players"]) > 1 for v in variants)
     for r in match["rounds"]:
         assert len(r["equipment"]) == 10
         timeline = store.timeline(r["id"])

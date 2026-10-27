@@ -57,3 +57,27 @@ test("mobile navigation and filters remain accessible", async ({ page }) => {
     ),
   ).toBeTruthy();
 });
+
+test("areas, lineup variants and curator queues are usable", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "道具库", exact: true }).click();
+  await page.getByLabel("地图", { exact: true }).selectOption("de_mirage");
+  await page.getByLabel("区域", { exact: true }).selectOption("A 包点");
+  const cards = page.locator('[data-testid="throw-card"]');
+  await expect(cards.first()).toContainText("A 包点");
+  await cards.first().click();
+  await expect(page.getByText("出手区域")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /同一投法的职业案例/ }),
+  ).toBeVisible();
+  await page.getByLabel("关闭详情").click();
+  await page.getByRole("button", { name: "数据与内容管理" }).click();
+  await expect(
+    page.getByRole("heading", { name: "地图区域词表" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "异常回合复核" }),
+  ).toBeVisible();
+});

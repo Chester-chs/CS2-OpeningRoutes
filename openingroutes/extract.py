@@ -57,12 +57,67 @@ def file_hash(path):
     return h.hexdigest()
 
 
+PLACES_VERSION = 2
+EFFECT_PLACE_RADIUS = 300.0
+EFFECT_PLACE_DZ = 160.0
+
+
+def annotate_places(parser, throws: list[dict], observed=None) -> int:
+    """Attach demo callouts. The release place is the thrower's own ``last_place_name``.
+    The effect place is approximated from the nearest position any player occupied in this
+    match (same height band) and is stored with its basis and distance; never presented as exact."""
+    thrown = records(parser.parse_event("grenade_thrown", player=["last_place_name"]))
+    origin = {(e["tick"], str(e.get("user_steamid"))): e.get("user_last_place_name") for e in thrown}
+    if observed is None:
+        ticks = [t["tick"] for t in throws]
+        lo, hi = (min(ticks), max(t.get("effect_tick") or t["tick"] for t in throws)) if ticks else (0, -1)
+        observed = parser.parse_ticks(["X", "Y", "Z", "last_place_name"], ticks=list(range(lo, hi + 1, 32)))
+    observed = observed.dropna(subset=["X", "Y", "Z"])
+    observed = observed[observed["last_place_name"].fillna("") != ""]
+    xyz = observed[["X", "Y", "Z"]].to_numpy(dtype=float)
+    names = observed["last_place_name"].to_numpy()
+    for t in throws:
+        t["origin_place"] = origin.get((t["tick"], str(t["player_id"]))) or None
+        t["effect_place"], t["effect_place_basis"] = None, None
+        effect = t.get("effect_position")
+        if not len(xyz) or not effect or any(v is None for v in effect):
+            continue
+        band = abs(xyz[:, 2] - effect[2]) <= EFFECT_PLACE_DZ
+        if not band.any():
+            continue
+        flat = ((xyz[band, 0] - effect[0]) ** 2 + (xyz[band, 1] - effect[1]) ** 2) ** 0.5
+        best = int(flat.argmin())
+        if flat[best] <= EFFECT_PLACE_RADIUS:
+            t["effect_place"] = str(names[band][best])
+            t["effect_place_basis"] = {
+                "method": "nearest_observed_player_position",
+                "distance": round(float(flat[best])),
+            }
+    return sum(1 for t in throws if t["origin_place"])
+
+
+def enrich_places(path: Path, store: Store) -> dict:
+    """Add callouts to a match imported before place support, without re-importing it."""
+    match_id = file_hash(path)[:20]
+    match = store.all("matches").get(match_id)
+    if match is None:
+        raise ValueError("This demo has not been imported")
+    annotate_places(DemoParser(str(path)), match["throws"])
+    match["places_version"] = PLACES_VERSION
+    store.save_match(match)
+    return match
+
+
 def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: None) -> dict:
     started = time.monotonic()
     sha = file_hash(path)
     match_id = sha[:20]
-    if match_id in store.all("matches"):
-        return store.all("matches")[match_id]
+    existing = store.all("matches").get(match_id)
+    if existing is not None:
+        if existing.get("places_version") != PLACES_VERSION:
+            progress("places")
+            return enrich_places(path, store)
+        return existing
     parser = DemoParser(str(path))
     header = parser.parse_header()
     progress("events")
@@ -116,7 +171,18 @@ def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: 
         set(range(rounds[0]["start_tick"], final_tick + 1, stride)) | {r["freeze_end_tick"] for r in rounds}
     )
     positions = parser.parse_ticks(
-        ["X", "Y", "Z", "is_alive", "team_num", "team_clan_name", "inventory", "armor_value", "health"],
+        [
+            "X",
+            "Y",
+            "Z",
+            "is_alive",
+            "team_num",
+            "team_clan_name",
+            "inventory",
+            "armor_value",
+            "health",
+            "last_place_name",
+        ],
         ticks=sample_ticks,
     )
     positions["steamid"] = positions["steamid"].astype(str)
@@ -204,6 +270,8 @@ def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: 
                 "action_status": "requires reproduction",
             }
         )
+    progress("places")
+    annotate_places(parser, throws, positions)
     progress("validation")
     for r in rounds:
         end = r["end_tick"] or final_tick
@@ -266,6 +334,7 @@ def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: 
         "source": source,
         "sha256": sha,
         "parser_version": version("demoparser2"),
+        "places_version": PLACES_VERSION,
         "game_version": header.get("patch_version", "unknown"),
         "tick_rate": rate,
         "route_sample_hz": rate / stride,

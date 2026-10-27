@@ -8,6 +8,7 @@ const stageNames: Record<string, string> = {
   events: "提取回合与事件",
   routes: "提取全员路线",
   grenades: "匹配道具轨迹",
+  places: "标注地图区域",
   validation: "校验与保存",
   complete: "提取完成",
 };
@@ -24,10 +25,12 @@ export default function Manage({
   client,
   catalog,
   onRefresh,
+  onOpenRound,
 }: {
   client: DataClient;
   catalog: Catalog;
   onRefresh: () => void;
+  onOpenRound?: (id: string) => void;
 }) {
   const [source, setSource] = useState<Source>({
     event: "",
@@ -244,7 +247,149 @@ export default function Manage({
           ))
         )}
       </section>
+      <RoundQueue catalog={catalog} onOpenRound={onOpenRound} />
+      <PlaceVocabulary
+        catalog={catalog}
+        client={client}
+        onRefresh={onRefresh}
+      />
     </div>
+  );
+}
+
+function RoundQueue({
+  catalog,
+  onOpenRound,
+}: {
+  catalog: Catalog;
+  onOpenRound?: (id: string) => void;
+}) {
+  const pending = catalog.rounds.filter((r) => r.review_required);
+  const resolved = catalog.rounds.filter((r) => r.review?.resolution);
+  return (
+    <section className="panel wide">
+      <h2>异常回合复核</h2>
+      <p className="muted">
+        重开、缺失结束事件或比赛规则长度未知的回合需人工确认后才能审核导出；排除的回合不计入手枪局与职业统计。
+      </p>
+      {pending.length === 0 && resolved.length === 0 && (
+        <p className="muted">当前没有需要复核的回合。</p>
+      )}
+      <ul className="queue">
+        {[...pending, ...resolved].map((r) => {
+          const match = catalog.matches.find((m) => m.id === r.match_id);
+          return (
+            <li key={r.id}>
+              <button
+                className="text-button"
+                onClick={() => onOpenRound?.(r.id)}
+              >
+                {match?.map.replace("de_", "")} · 第 {r.number} 回合
+              </button>
+              <span className={r.review_required ? "status pending" : "status"}>
+                {r.review_required
+                  ? "待处理"
+                  : r.excluded
+                    ? "已排除"
+                    : "已确认"}
+              </span>
+              {r.review?.resolution_note && (
+                <span className="micro"> {r.review.resolution_note}</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function PlaceVocabulary({
+  catalog,
+  client,
+  onRefresh,
+}: {
+  catalog: Catalog;
+  client: DataClient;
+  onRefresh: () => void;
+}) {
+  const maps = [...new Set(catalog.matches.map((m) => m.map))].sort();
+  const [chosen, setMap] = useState("");
+  const map = maps.includes(chosen) ? chosen : maps[0] || "";
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState("");
+  const counts = new Map<string, number>();
+  for (const t of catalog.throws)
+    if (t.map === map)
+      for (const place of [t.origin_place, t.effect_place])
+        if (place) counts.set(place, (counts.get(place) || 0) + 1);
+  const labels = catalog.places?.[map] || {};
+  return (
+    <section className="panel wide">
+      <div className="section-line">
+        <h2>地图区域词表</h2>
+        <select
+          aria-label="选择词表地图"
+          value={map}
+          onChange={(e) => setMap(e.target.value)}
+        >
+          {maps.map((m) => (
+            <option key={m} value={m}>
+              {m.replace("de_", "")}
+            </option>
+          ))}
+        </select>
+      </div>
+      <p className="muted">
+        区域名来自 Demo
+        的地图点位名。社区中文叫法（如“黑屋”）请核对后在这里填写，系统不会自动猜测。
+      </p>
+      {counts.size === 0 ? (
+        <p className="muted">
+          这张地图的投掷还没有区域信息。重新导入同一 Demo
+          即可补充，不会重复计数。
+        </p>
+      ) : (
+        <div className="place-table">
+          {[...counts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .map(([place, count]) => (
+              <label key={place}>
+                <code>{place}</code>
+                <span className="micro">{count} 次</span>
+                <input
+                  aria-label={`${place} 的中文名称`}
+                  value={drafts[place] ?? labels[place] ?? ""}
+                  placeholder="填写中文名称"
+                  onChange={(e) =>
+                    setDrafts((v) => ({ ...v, [place]: e.target.value }))
+                  }
+                />
+                <button
+                  className="text-button"
+                  disabled={!drafts[place]?.trim()}
+                  onClick={async () => {
+                    try {
+                      await client.write(
+                        `places/${encodeURIComponent(map)}/${encodeURIComponent(place)}`,
+                        "PUT",
+                        { label: drafts[place] },
+                      );
+                      setMessage(`已保存 ${place} → ${drafts[place]}`);
+                      onRefresh();
+                    } catch (e) {
+                      setMessage((e as Error).message);
+                    }
+                  }}
+                >
+                  保存
+                </button>
+              </label>
+            ))}
+        </div>
+      )}
+      {message && <p role="status">{message}</p>}
+    </section>
   );
 }
 

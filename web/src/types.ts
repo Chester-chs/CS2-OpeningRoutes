@@ -48,6 +48,25 @@ export type Throw = {
   is_pistol: boolean;
   teaching: Teaching;
   gaps: string[];
+  origin_place?: string | null;
+  effect_place?: string | null;
+  origin_area?: string;
+  effect_area?: string;
+  effect_place_basis?: { method: string; distance: number } | null;
+  variant_id?: string | null;
+};
+export type Variant = {
+  id: string;
+  source: "auto" | "manual";
+  members: string[];
+  players: string[];
+  map: string;
+  kind: string;
+  side: Side;
+  title: string;
+  purpose: string;
+  reviewed: boolean;
+  reviewer: string;
 };
 export type Equipment = {
   player_id: string;
@@ -78,7 +97,12 @@ export type Round = {
     description?: string;
     pro_video?: string;
     reviewer?: string;
+    resolution?: "" | "confirmed" | "excluded";
+    resolution_note?: string;
+    pistol_override?: boolean | null;
   };
+  excluded?: boolean;
+  resolution?: string;
 };
 export type Plan = {
   id: string;
@@ -98,9 +122,12 @@ export type Catalog = {
   rounds: Round[];
   throws: Throw[];
   plans: Plan[];
+  variants?: Variant[];
+  places?: Record<string, Record<string, string>>;
 };
 export type Filters = {
   query?: string;
+  area?: string;
   map?: string;
   side?: string;
   kind?: string;

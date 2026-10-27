@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Bookmark, Check, ExternalLink, Save, X } from "lucide-react";
-import { DataClient, kindNames, mediaUrl, teachingLabels } from "./data";
+import {
+  DataClient,
+  kindNames,
+  mediaUrl,
+  teachingLabels,
+  variantPeers,
+} from "./data";
 import type { Catalog, Round, Teaching, Throw } from "./types";
 import Timeline from "./Timeline";
 
@@ -226,6 +232,7 @@ export default function Detail({
   client,
   onClose,
   onSaved,
+  onOpen,
   favorites,
   toggleFavorite,
 }: {
@@ -235,6 +242,7 @@ export default function Detail({
   client: DataClient;
   onClose: () => void;
   onSaved: () => void;
+  onOpen?: (id: string) => void;
   favorites: string[];
   toggleFavorite: (id: string) => void;
 }) {
@@ -261,15 +269,6 @@ export default function Detail({
   const title = row
     ? row.teaching.title || `${row.player} · ${kindNames[row.kind] || row.kind}`
     : `第 ${round.number} 回合${round.is_pistol ? " · 手枪局" : ""}`;
-  const samePurpose = row?.teaching.area
-    ? catalog.throws.filter(
-        (t) =>
-          t.id !== row.id &&
-          t.teaching.area === row.teaching.area &&
-          t.kind === row.kind &&
-          t.map === row.map,
-      )
-    : [];
   function saveNote() {
     try {
       localStorage.setItem(`or-note-${id}`, note);
@@ -382,6 +381,17 @@ export default function Detail({
                       </code>
                     </div>
                   </div>
+                  <p>
+                    出手区域 <strong>{row.origin_area || "未解析到"}</strong> ·
+                    落点区域 <strong>{row.effect_area || "未知"}</strong>
+                    {row.effect_place_basis && (
+                      <span className="micro">
+                        {" "}
+                        （按最近的选手位置推测，相距约{" "}
+                        {row.effect_place_basis.distance} 单位）
+                      </span>
+                    )}
+                  </p>
                   <p className="micro">
                     tick {row.tick} ·{" "}
                     {row.trajectory_status === "matched"
@@ -424,22 +434,13 @@ export default function Detail({
                     </section>
                   ))}
                 </div>
-                {samePurpose.length > 0 && (
-                  <section>
-                    <h3>同区域、同类型的其他投法</h3>
-                    <p>
-                      {samePurpose
-                        .map(
-                          (t) =>
-                            `${t.player} · 第${t.round_number}回合 · ${t.teaching.title || "未命名投法"}`,
-                        )
-                        .join("；")}
-                    </p>
-                    <p className="micro">
-                      由已整理的区域标签关联；相同落点不自动视为相同投法。
-                    </p>
-                  </section>
-                )}
+                <VariantSection
+                  row={row}
+                  catalog={catalog}
+                  client={client}
+                  onSaved={onSaved}
+                  onOpen={onOpen}
+                />
               </>
             )}
             <section>
@@ -479,6 +480,75 @@ export default function Detail({
                     }
                   />
                 </label>
+                <fieldset className="resolution">
+                  <legend>
+                    异常回合复核
+                    {round.review_required && (
+                      <span className="status pending">待处理</span>
+                    )}
+                  </legend>
+                  <p className="micro">
+                    解析依据：{round.pistol_basis}
+                    {round.review_required &&
+                      " · 此回合存在重开、缺失或规则长度未知等情况，需人工确认。"}
+                  </p>
+                  <label>
+                    处理结论
+                    <select
+                      aria-label="异常回合处理结论"
+                      value={review.resolution || ""}
+                      onChange={(e) =>
+                        setReview((v) => ({
+                          ...v,
+                          resolution: e.target.value as
+                            "" | "confirmed" | "excluded",
+                        }))
+                      }
+                    >
+                      <option value="">未处理</option>
+                      <option value="confirmed">确认为有效正式回合</option>
+                      <option value="excluded">排除，不计入统计</option>
+                    </select>
+                  </label>
+                  <label>
+                    是否手枪局
+                    <select
+                      aria-label="手枪局人工修正"
+                      value={
+                        review.pistol_override == null
+                          ? ""
+                          : String(review.pistol_override)
+                      }
+                      onChange={(e) =>
+                        setReview((v) => ({
+                          ...v,
+                          pistol_override:
+                            e.target.value === ""
+                              ? null
+                              : e.target.value === "true",
+                        }))
+                      }
+                    >
+                      <option value="">保持解析结果</option>
+                      <option value="true">是正式手枪局</option>
+                      <option value="false">不是手枪局</option>
+                    </select>
+                  </label>
+                  <label>
+                    复核依据
+                    <textarea
+                      aria-label="异常回合复核依据"
+                      value={review.resolution_note || ""}
+                      onChange={(e) =>
+                        setReview((v) => ({
+                          ...v,
+                          resolution_note: e.target.value,
+                        }))
+                      }
+                      placeholder="例如：比赛页面核对为下半场首局；技术暂停后重开，保留最终完整回合"
+                    />
+                  </label>
+                </fieldset>
                 <label>
                   核验人
                   <input
@@ -504,6 +574,23 @@ export default function Detail({
                   }}
                 >
                   审核并允许导出
+                </button>
+                <button
+                  className="button secondary"
+                  onClick={async () => {
+                    try {
+                      await client.write(`rounds/${round.id}/review`, "PUT", {
+                        ...review,
+                        approved: false,
+                      });
+                      setReviewMessage("复核结论已保存。");
+                      onSaved();
+                    } catch (e) {
+                      setReviewMessage((e as Error).message);
+                    }
+                  }}
+                >
+                  仅保存复核
                 </button>
                 {reviewMessage && <p role="alert">{reviewMessage}</p>}
               </section>
@@ -599,6 +686,144 @@ function RoundFacts({ round, catalog }: { round: Round; catalog: Catalog }) {
         {round.review_required ? " · 异常回合需要复核" : ""}
       </p>
       {round.review.description && <p>{round.review.description}</p>}
+    </section>
+  );
+}
+
+function VariantSection({
+  row,
+  catalog,
+  client,
+  onSaved,
+  onOpen,
+}: {
+  row: Throw;
+  catalog: Catalog;
+  client: DataClient;
+  onSaved: () => void;
+  onOpen?: (id: string) => void;
+}) {
+  const { variant, others } = variantPeers(catalog, row);
+  const [meta, setMeta] = useState({
+    title: variant?.title || "",
+    purpose: variant?.purpose || "",
+    reviewed: Boolean(variant?.reviewed),
+    reviewer: variant?.reviewer || "",
+  });
+  const [message, setMessage] = useState("");
+  if (!variant) return null;
+  const run = (action: Promise<unknown>, done: string) =>
+    action
+      .then(() => {
+        setMessage(done);
+        onSaved();
+      })
+      .catch((e) => setMessage((e as Error).message));
+  return (
+    <section className="variant">
+      <h3>
+        同一投法的职业案例{" "}
+        <span className="micro">
+          {variant.source === "manual" ? "人工归组" : "自动候选归组"} ·{" "}
+          {variant.members.length} 次 · {variant.players.length} 名选手
+          {variant.reviewed ? ` · ${variant.reviewer} 已复核` : " · 未复核"}
+        </span>
+      </h3>
+      {variant.title && (
+        <p>
+          <strong>{variant.title}</strong>
+          {variant.purpose && ` — ${variant.purpose}`}
+        </p>
+      )}
+      {others.length ? (
+        <ul className="peer-list">
+          {others.map((t) => (
+            <li key={t.id}>
+              <button className="text-button" onClick={() => onOpen?.(t.id)}>
+                {t.player} · {t.team || t.side} · 第 {t.round_number} 回合 ·{" "}
+                {t.time.toFixed(1)}s
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="micro">
+          目前只有这一次职业使用记录。站位、视角或落点不同的投掷不会自动合并。
+        </p>
+      )}
+      {client.mode === "desktop" && (
+        <div className="editor compact">
+          <label>
+            投法名称
+            <input
+              aria-label="投法名称"
+              value={meta.title}
+              onChange={(e) =>
+                setMeta((v) => ({ ...v, title: e.target.value }))
+              }
+            />
+          </label>
+          <label>
+            用途
+            <input
+              aria-label="投法用途"
+              value={meta.purpose}
+              onChange={(e) =>
+                setMeta((v) => ({ ...v, purpose: e.target.value }))
+              }
+            />
+          </label>
+          <label>
+            复核人
+            <input
+              aria-label="投法复核人"
+              value={meta.reviewer}
+              onChange={(e) =>
+                setMeta((v) => ({ ...v, reviewer: e.target.value }))
+              }
+            />
+          </label>
+          <label className="inline">
+            <input
+              type="checkbox"
+              checked={meta.reviewed}
+              onChange={(e) =>
+                setMeta((v) => ({ ...v, reviewed: e.target.checked }))
+              }
+            />
+            已人工核对归组
+          </label>
+          <div className="actions">
+            <button
+              className="button secondary"
+              onClick={() =>
+                void run(
+                  client.write(`variants/${variant.id}`, "PUT", meta),
+                  "投法信息已保存。",
+                )
+              }
+            >
+              保存投法信息
+            </button>
+            {variant.members.length > 1 && (
+              <button
+                className="text-button"
+                onClick={() =>
+                  void run(
+                    client.write(`variants/${variant.id}/split`, "POST", {
+                      throw_ids: [row.id],
+                    }),
+                    "已将这次投掷拆分为单独的投法。",
+                  )
+                }
+              >
+                不是同一投法，拆分出来
+              </button>
+            )}
+          </div>
+          {message && <p role="status">{message}</p>}
+        </div>
+      )}
     </section>
   );
 }

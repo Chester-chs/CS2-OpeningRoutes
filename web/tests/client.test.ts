@@ -71,7 +71,10 @@ describe("desktop and static content adapters", () => {
   it("rejects corrupted exports and missing checksums", async () => {
     const c = new DataClient();
     c.files = { "catalog.json": "wrong" };
-    vi.stubGlobal("fetch", vi.fn().mockImplementation(()=>Promise.resolve(response(EMPTY))));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => Promise.resolve(response(EMPTY))),
+    );
     await expect(c.catalog()).rejects.toThrow("校验失败");
     c.files = {};
     await expect(c.catalog()).rejects.toThrow("缺少文件校验");
