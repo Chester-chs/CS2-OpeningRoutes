@@ -89,7 +89,7 @@ uv run python -m http.server 8766 --bind 127.0.0.1 --directory artifacts/web-pre
 
 ## 当前边界
 
-- 已核验的解析样本来自同一职业系列赛的 Ancient 和 Mirage，尚不能据此宣称覆盖所有赛事、地图或比赛时期。
+- 已核验的解析样本来自两个职业系列赛（PGL Bucharest 2025 Falcons–G2、PGL Masters Bucharest 2026 Spirit–FURIA）的 Ancient 和 Mirage，尚不能据此宣称覆盖所有赛事、地图或比赛时期。
 - 当前路线为世界坐标示意，保留高度值；尚未提供经校准的分层雷达底图。
 - 按键教学、社区区域叫法、配合解释和反制结论需要人工核对。自动投法归组只是候选，需要人工复核后才算确认。
 - 落点区域是按附近选手点位推测的，不等于精确的区域边界。

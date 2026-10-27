@@ -5,10 +5,29 @@ import json
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+
+def make_zip(target: Path | None = None) -> Path:
+    """Portable ZIP with forward-slash entries (PowerShell 5 Compress-Archive writes backslashes)."""
+    from openingroutes import __version__
+
+    target = target or ROOT / "artifacts/desktop/OpeningRoutes"
+    archive = ROOT / f"artifacts/OpeningRoutes-v{__version__}-windows.zip"
+    partial = archive.with_suffix(".zip.part")
+    with zipfile.ZipFile(partial, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+        for path in sorted(target.rglob("*")):
+            if path.is_file():
+                z.write(path, f"{target.name}/{path.relative_to(target).as_posix()}")
+    with zipfile.ZipFile(partial) as z:
+        if z.testzip() is not None:
+            raise RuntimeError("ZIP verification failed")
+    partial.replace(archive)
+    return archive
 
 
 def main():
@@ -70,6 +89,7 @@ def main():
         encoding="utf-8",
     )
     print(target)
+    print(make_zip(target))
 
 
 if __name__ == "__main__":
