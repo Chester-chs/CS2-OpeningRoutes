@@ -45,3 +45,7 @@ $RECYCLE.BIN/
 *.parquet
 *.sqlite*
 *.spec
+
+*.tsbuildinfo
+/dist/
+/build/

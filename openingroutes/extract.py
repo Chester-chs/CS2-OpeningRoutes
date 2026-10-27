@@ -1,4 +1,5 @@
 """Parse real CS2 demos. No tactical explanations are inferred as facts."""
+
 import hashlib
 import json
 import time
@@ -12,13 +13,36 @@ from demoparser2 import DemoParser
 from .domain import build_rounds, side
 from .store import Store, now
 
-KINDS = {"smokegrenade": "smoke", "flashbang": "flash", "hegrenade": "he",
-         "molotov": "molotov", "incgrenade": "incendiary", "decoy": "decoy"}
-PROJECTILES = {"CSmokeGrenadeProjectile": "smoke", "CFlashbangProjectile": "flash",
-               "CHEGrenadeProjectile": "he", "CMolotovProjectile": "fire", "CDecoyProjectile": "decoy"}
-EVENTS = ["round_start", "round_freeze_end", "round_end", "grenade_thrown", "smokegrenade_detonate",
-          "flashbang_detonate", "hegrenade_detonate", "inferno_startburn", "decoy_started",
-          "player_death", "bomb_planted", "bomb_defused", "bomb_exploded"]
+KINDS = {
+    "smokegrenade": "smoke",
+    "flashbang": "flash",
+    "hegrenade": "he",
+    "molotov": "molotov",
+    "incgrenade": "incendiary",
+    "decoy": "decoy",
+}
+PROJECTILES = {
+    "CSmokeGrenadeProjectile": "smoke",
+    "CFlashbangProjectile": "flash",
+    "CHEGrenadeProjectile": "he",
+    "CMolotovProjectile": "fire",
+    "CDecoyProjectile": "decoy",
+}
+EVENTS = [
+    "round_start",
+    "round_freeze_end",
+    "round_end",
+    "grenade_thrown",
+    "smokegrenade_detonate",
+    "flashbang_detonate",
+    "hegrenade_detonate",
+    "inferno_startburn",
+    "decoy_started",
+    "player_death",
+    "bomb_planted",
+    "bomb_defused",
+    "bomb_exploded",
+]
 
 
 def records(frame):
@@ -42,9 +66,23 @@ def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: 
     parser = DemoParser(str(path))
     header = parser.parse_header()
     progress("events")
-    event_frames = dict(parser.parse_events(EVENTS, player=[
-        "X", "Y", "Z", "pitch", "yaw", "team_num", "team_clan_name", "inventory", "armor_value",
-    ], other=["total_rounds_played", "is_warmup_period", "game_phase"]))
+    event_frames = dict(
+        parser.parse_events(
+            EVENTS,
+            player=[
+                "X",
+                "Y",
+                "Z",
+                "pitch",
+                "yaw",
+                "team_num",
+                "team_clan_name",
+                "inventory",
+                "armor_value",
+            ],
+            other=["total_rounds_played", "is_warmup_period", "game_phase"],
+        )
+    )
     events = {name: records(frame) for name, frame in event_frames.items()}
     convars = parser.parse_event("server_cvar")
     maxrounds = convars[convars["name"] == "mp_maxrounds"]["value"].tolist() if not convars.empty else []
@@ -53,7 +91,11 @@ def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: 
     if not rounds:
         raise ValueError("No official rounds found; check demo format and warmup state")
     first_tick = rounds[0]["freeze_end_tick"]
-    clock = parser.parse_ticks(["game_time"], ticks=[first_tick, first_tick + 64]).groupby("tick").game_time.first()
+    clock = (
+        parser.parse_ticks(["game_time"], ticks=[first_tick, first_tick + 64])
+        .groupby("tick")
+        .game_time.first()
+    )
     if len(clock) < 2 or clock.iloc[-1] <= clock.iloc[0]:
         raise ValueError("Cannot verify demo tick-to-time conversion")
     rate = (clock.index[-1] - clock.index[0]) / (clock.iloc[-1] - clock.iloc[0])
@@ -61,16 +103,22 @@ def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: 
     if half is None:
         warnings.append("Regulation length missing: pistol identification requires manual review")
     for r in rounds:
-        starts = [e["tick"] for e in events.get("round_start", [])
-                  if e.get("is_warmup_period") is False and e["tick"] <= r["freeze_end_tick"]]
+        starts = [
+            e["tick"]
+            for e in events.get("round_start", [])
+            if e.get("is_warmup_period") is False and e["tick"] <= r["freeze_end_tick"]
+        ]
         r["start_tick"] = max(starts, default=r["freeze_end_tick"])
     final_tick = max(r["end_tick"] or r["freeze_end_tick"] for r in rounds)
     progress("routes")
     stride = max(1, round(rate / 4))
-    sample_ticks = sorted(set(range(rounds[0]["start_tick"], final_tick + 1, stride))
-                          | {r["freeze_end_tick"] for r in rounds})
-    positions = parser.parse_ticks(["X", "Y", "Z", "is_alive", "team_num", "team_clan_name",
-                                    "inventory", "armor_value", "health"], ticks=sample_ticks)
+    sample_ticks = sorted(
+        set(range(rounds[0]["start_tick"], final_tick + 1, stride)) | {r["freeze_end_tick"] for r in rounds}
+    )
+    positions = parser.parse_ticks(
+        ["X", "Y", "Z", "is_alive", "team_num", "team_clan_name", "inventory", "armor_value", "health"],
+        ticks=sample_ticks,
+    )
     positions["steamid"] = positions["steamid"].astype(str)
     player_info = records(parser.parse_player_info())
     players = {str(p["steamid"]): p["name"] for p in player_info}
@@ -79,14 +127,21 @@ def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: 
     grenades = grenades[grenades["grenade_type"].isin(PROJECTILES)].dropna(subset=["x", "y", "z"])
     grenades["steamid"] = grenades["steamid"].astype(str)
     tracks = defaultdict(list)
-    for (owner, entity, grenade_type), group in grenades.groupby(["steamid", "grenade_entity_id", "grenade_type"]):
+    for (owner, entity, grenade_type), group in grenades.groupby(
+        ["steamid", "grenade_entity_id", "grenade_type"]
+    ):
         group = group.sort_values("tick").drop_duplicates("tick")
         segments = (group["tick"].diff().fillna(1) > 2).cumsum()
         for _, segment in group.groupby(segments):
             tracks[owner].append((int(entity), PROJECTILES[grenade_type], segment))
     throws = []
-    det_names = ["smokegrenade_detonate", "flashbang_detonate", "hegrenade_detonate",
-                 "inferno_startburn", "decoy_started"]
+    det_names = [
+        "smokegrenade_detonate",
+        "flashbang_detonate",
+        "hegrenade_detonate",
+        "inferno_startburn",
+        "decoy_started",
+    ]
     detonations = sorted([e for name in det_names for e in events.get(name, [])], key=lambda e: e["tick"])
     for event in sorted(events.get("grenade_thrown", []), key=lambda e: e["tick"]):
         if event.get("is_warmup_period") is not False:
@@ -97,65 +152,130 @@ def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: 
             continue
         owner = str(event.get("user_steamid", ""))
         kind = KINDS.get(event.get("weapon"), event.get("weapon", "unknown"))
-        candidates = [(entity, group) for entity, gkind, group in tracks[owner]
-                      if (gkind == kind or gkind == "fire" and kind in ("molotov", "incendiary"))
-                      and abs(int(group.iloc[0]["tick"]) - tick) <= 2]
+        candidates = [
+            (entity, group)
+            for entity, gkind, group in tracks[owner]
+            if (gkind == kind or gkind == "fire" and kind in ("molotov", "incendiary"))
+            and abs(int(group.iloc[0]["tick"]) - tick) <= 2
+        ]
         entity, group = candidates[0] if len(candidates) == 1 else (None, None)
-        effect = next((e for e in detonations if entity is not None and e.get("entityid") == entity
-                       and tick <= e["tick"] <= tick + rate * 15), None)
+        effect = next(
+            (
+                e
+                for e in detonations
+                if entity is not None
+                and e.get("entityid") == entity
+                and tick <= e["tick"] <= tick + rate * 15
+            ),
+            None,
+        )
         trajectory = []
         if group is not None:
             if effect:
                 group = group[group["tick"] <= effect["tick"]]
             sampled = pd.concat([group.iloc[::4], group.tail(1)]).drop_duplicates("tick")
-            trajectory = [[int(t), round(x, 3), round(y, 3), round(z, 3)]
-                          for t, x, y, z in sampled[["tick", "x", "y", "z"]].itertuples(index=False, name=None)]
-        throws.append({
-            "id": f"{match_id}-t{tick}-{owner}", "match_id": match_id, "round_id": r["id"],
-            "round_number": r["number"], "map": header["map_name"], "player_id": owner,
-            "player": event.get("user_name"), "team": event.get("user_team_clan_name"),
-            "side": side(event.get("user_team_num")), "kind": kind, "tick": tick,
-            "time": round((tick - r["freeze_end_tick"]) / rate, 3),
-            "position": [event.get(f"user_{c}") for c in ("X", "Y", "Z")],
-            "view": {"pitch": event.get("user_pitch"), "yaw": event.get("user_yaw")},
-            "inventory": event.get("user_inventory"), "entity_id": entity,
-            "effect_position": [effect.get(c) for c in ("x", "y", "z")] if effect else None,
-            "effect_tick": effect["tick"] if effect else None,
-            "trajectory": trajectory, "trajectory_status": "matched" if trajectory else "unmatched",
-            "is_pistol": r["is_pistol"], "action_status": "requires reproduction",
-        })
+            trajectory = [
+                [int(t), round(x, 3), round(y, 3), round(z, 3)]
+                for t, x, y, z in sampled[["tick", "x", "y", "z"]].itertuples(index=False, name=None)
+            ]
+        throws.append(
+            {
+                "id": f"{match_id}-t{tick}-{owner}",
+                "match_id": match_id,
+                "round_id": r["id"],
+                "round_number": r["number"],
+                "map": header["map_name"],
+                "player_id": owner,
+                "player": event.get("user_name"),
+                "team": event.get("user_team_clan_name"),
+                "side": side(event.get("user_team_num")),
+                "kind": kind,
+                "tick": tick,
+                "time": round((tick - r["freeze_end_tick"]) / rate, 3),
+                "position": [event.get(f"user_{c}") for c in ("X", "Y", "Z")],
+                "view": {"pitch": event.get("user_pitch"), "yaw": event.get("user_yaw")},
+                "inventory": event.get("user_inventory"),
+                "entity_id": entity,
+                "effect_position": [effect.get(c) for c in ("x", "y", "z")] if effect else None,
+                "effect_tick": effect["tick"] if effect else None,
+                "trajectory": trajectory,
+                "trajectory_status": "matched" if trajectory else "unmatched",
+                "is_pistol": r["is_pistol"],
+                "action_status": "requires reproduction",
+            }
+        )
     progress("validation")
     for r in rounds:
         end = r["end_tick"] or final_tick
         frame = positions[(positions.tick >= r["start_tick"]) & (positions.tick <= end)]
         equipment = frame[frame.tick == r["freeze_end_tick"]]
-        r["equipment"] = [{"player_id": row["steamid"], "player": row["name"],
-                           "team": row.get("team_clan_name"), "side": side(row.get("team_num")),
-                           "inventory": row.get("inventory"), "armor": row.get("armor_value")}
-                          for row in records(equipment)]
+        r["equipment"] = [
+            {
+                "player_id": row["steamid"],
+                "player": row["name"],
+                "team": row.get("team_clan_name"),
+                "side": side(row.get("team_num")),
+                "inventory": row.get("inventory"),
+                "armor": row.get("armor_value"),
+            }
+            for row in records(equipment)
+        ]
         deaths = [e for e in events.get("player_death", []) if r["freeze_end_tick"] <= e["tick"] <= end]
-        r["opening_kill"] = {"attacker": deaths[0].get("attacker_name"), "victim": deaths[0].get("user_name"),
-                             "tick": deaths[0]["tick"]} if deaths else None
-        r["bomb_events"] = [{"kind": name, "tick": e["tick"], "player": e.get("user_name")}
-                            for name in ("bomb_planted", "bomb_defused", "bomb_exploded")
-                            for e in events.get(name, []) if r["freeze_end_tick"] <= e["tick"] <= end]
+        r["opening_kill"] = (
+            {
+                "attacker": deaths[0].get("attacker_name"),
+                "victim": deaths[0].get("user_name"),
+                "tick": deaths[0]["tick"],
+            }
+            if deaths
+            else None
+        )
+        r["bomb_events"] = [
+            {"kind": name, "tick": e["tick"], "player": e.get("user_name")}
+            for name in ("bomb_planted", "bomb_defused", "bomb_exploded")
+            for e in events.get(name, [])
+            if r["freeze_end_tick"] <= e["tick"] <= end
+        ]
         routes = {}
         for owner, group in frame.groupby("steamid"):
-            routes[owner] = {"name": players.get(owner, owner), "points": [
-                [int(t), round(x, 2), round(y, 2), round(z, 2), side(team), bool(alive)]
-                for t, x, y, z, team, alive in group.dropna(subset=["X", "Y", "Z"])[
-                    ["tick", "X", "Y", "Z", "team_num", "is_alive"]].itertuples(index=False, name=None)]}
-        store.write_timeline(r["id"], {"round_id": r["id"], "tick_rate": rate,
-                                     "sample_hz": rate / stride, "point_fields": ["tick", "x", "y", "z", "side", "alive"],
-                                     "players": routes})
+            routes[owner] = {
+                "name": players.get(owner, owner),
+                "points": [
+                    [int(t), round(x, 2), round(y, 2), round(z, 2), side(team), bool(alive)]
+                    for t, x, y, z, team, alive in group.dropna(subset=["X", "Y", "Z"])[
+                        ["tick", "X", "Y", "Z", "team_num", "is_alive"]
+                    ].itertuples(index=False, name=None)
+                ],
+            }
+        store.write_timeline(
+            r["id"],
+            {
+                "round_id": r["id"],
+                "tick_rate": rate,
+                "sample_hz": rate / stride,
+                "point_fields": ["tick", "x", "y", "z", "side", "alive"],
+                "players": routes,
+            },
+        )
     unmatched = sum(t["trajectory_status"] == "unmatched" for t in throws)
     if unmatched:
         warnings.append(f"{unmatched} throws have no unambiguous projectile match")
-    data = {"id": match_id, "map": header["map_name"], "source": source, "sha256": sha,
-            "parser_version": version("demoparser2"), "game_version": header.get("patch_version", "unknown"),
-            "tick_rate": rate, "route_sample_hz": rate / stride, "regulation_half": half,
-            "players": [{"id": key, "name": value} for key, value in players.items()],
-            "rounds": rounds, "throws": throws, "warnings": warnings,
-            "imported_at": now(), "parse_seconds": round(time.monotonic() - started, 2)}
+    data = {
+        "id": match_id,
+        "map": header["map_name"],
+        "source": source,
+        "sha256": sha,
+        "parser_version": version("demoparser2"),
+        "game_version": header.get("patch_version", "unknown"),
+        "tick_rate": rate,
+        "route_sample_hz": rate / stride,
+        "regulation_half": half,
+        "players": [{"id": key, "name": value} for key, value in players.items()],
+        "rounds": rounds,
+        "throws": throws,
+        "warnings": warnings,
+        "imported_at": now(),
+        "parse_seconds": round(time.monotonic() - started, 2),
+    }
     store.save_match(data)
     return data

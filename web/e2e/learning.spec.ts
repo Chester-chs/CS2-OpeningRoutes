@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 
 test('real catalog supports utility, whole-round context and independent pistol study', async ({page})=>{
   await page.goto('/');
-  await expect(page.getByRole('heading',{name:'从比赛里找到答案。'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:/从比赛里\s*找到答案。/})).toBeVisible();
   await page.getByRole('button',{name:'道具库',exact:true}).click();
   await expect(page.getByRole('heading',{name:'道具库',exact:true})).toBeVisible();
   await expect(page.locator('[data-testid="throw-card"]').first()).toBeVisible();
@@ -37,3 +37,4 @@ test('mobile navigation and filters remain accessible',async({page})=>{
   await expect(page.getByRole('heading',{name:'手枪局',exact:true})).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
 });
+

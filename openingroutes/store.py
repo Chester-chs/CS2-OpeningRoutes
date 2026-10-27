@@ -1,4 +1,5 @@
 """Transactional metadata; dense timelines live in separate per-round files."""
+
 import gzip
 import json
 import sqlite3
@@ -56,17 +57,28 @@ class Store:
 
     def catalog(self):
         from .domain import teaching_gaps
+
         teachings, reviews = self.all("teachings"), self.all("round_reviews")
-        catalog = {"schema_version": 1, "matches": [], "rounds": [], "throws": [],
-                   "plans": list(self.all("plans").values())}
+        catalog = {
+            "schema_version": 1,
+            "matches": [],
+            "rounds": [],
+            "throws": [],
+            "plans": list(self.all("plans").values()),
+        }
         for match in self.all("matches").values():
             catalog["matches"].append({k: v for k, v in match.items() if k not in ("rounds", "throws")})
             for row in match["rounds"]:
                 catalog["rounds"].append({**row, "review": reviews.get(row["id"], {})})
             for row in match["throws"]:
                 t = teachings.get(row["id"], {})
-                catalog["throws"].append({**row, "teaching": t,
-                                          "gaps": teaching_gaps(t, source_verified=match["source"]["verified"])})
+                catalog["throws"].append(
+                    {
+                        **row,
+                        "teaching": t,
+                        "gaps": teaching_gaps(t, source_verified=match["source"]["verified"]),
+                    }
+                )
         return catalog
 
     def timeline(self, round_id):

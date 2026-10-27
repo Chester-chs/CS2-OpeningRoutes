@@ -1,11 +1,27 @@
 """Pure rules shared by extraction, review, and publication."""
+
 from pathlib import PurePosixPath
 from urllib.parse import urlsplit
 
 TEACHING_FIELDS = (
-    "title", "area", "purpose", "prerequisites", "stance", "aim", "operation", "timing",
-    "effect", "coordination", "failures", "counterplay", "stance_image", "aim_image",
-    "pro_video", "verified_by", "verified_on", "map_version",
+    "title",
+    "area",
+    "purpose",
+    "prerequisites",
+    "stance",
+    "aim",
+    "operation",
+    "timing",
+    "effect",
+    "coordination",
+    "failures",
+    "counterplay",
+    "stance_image",
+    "aim_image",
+    "pro_video",
+    "verified_by",
+    "verified_on",
+    "map_version",
 )
 
 
@@ -34,8 +50,9 @@ def side(number) -> str | None:
     return {2: "T", 3: "CT", "T": "T", "CT": "CT"}.get(number)
 
 
-def build_rounds(match_id: str, freezes: list[dict], ends: list[dict],
-                 regulation_half: int | None = 12) -> list[dict]:
+def build_rounds(
+    match_id: str, freezes: list[dict], ends: list[dict], regulation_half: int | None = 12
+) -> list[dict]:
     """Pair by time: round_end's rounds-played field is already incremented in real demos."""
     valid = sorted((x for x in freezes if x.get("is_warmup_period") is False), key=lambda x: x["tick"])
     by_number: dict[int, list[dict]] = {}
@@ -44,13 +61,23 @@ def build_rounds(match_id: str, freezes: list[dict], ends: list[dict],
         if played is None:
             continue
         next_tick = valid[index + 1]["tick"] if index + 1 < len(valid) else float("inf")
-        end = next((e for e in sorted(ends, key=lambda x: x["tick"])
-                    if freeze["tick"] < e["tick"] < next_tick and side(e.get("winner"))), None)
+        end = next(
+            (
+                e
+                for e in sorted(ends, key=lambda x: x["tick"])
+                if freeze["tick"] < e["tick"] < next_tick and side(e.get("winner"))
+            ),
+            None,
+        )
         number = int(played) + 1
         row = {
-            "id": f"{match_id}-r{number}", "match_id": match_id, "number": number,
-            "start_tick": freeze["tick"], "freeze_end_tick": freeze["tick"],
-            "end_tick": end["tick"] if end else None, "complete": end is not None,
+            "id": f"{match_id}-r{number}",
+            "match_id": match_id,
+            "number": number,
+            "start_tick": freeze["tick"],
+            "freeze_end_tick": freeze["tick"],
+            "end_tick": end["tick"] if end else None,
+            "complete": end is not None,
             "winner": side(end.get("winner")) if end else None,
             "reason": end.get("reason") if end else None,
             "is_pistol": bool(end and regulation_half and played in (0, regulation_half)),

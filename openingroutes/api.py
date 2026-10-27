@@ -5,6 +5,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+from typing import Annotated
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -62,13 +63,20 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="demo-worker")
     for job in store.all("jobs").values():
         if job["status"] in ("queued", "parsing"):
-            store.put("jobs", job["id"], {**job, "status": "interrupted", "error": "Restart interrupted this import. Retry."})
+            store.put(
+                "jobs",
+                job["id"],
+                {**job, "status": "interrupted", "error": "Restart interrupted this import. Retry."},
+            )
 
     @app.middleware("http")
     async def local_boundary(request: Request, call_next):
         host = urlsplit("//" + request.headers.get("host", "")).hostname
-        if host not in ({"127.0.0.1", "localhost", "[::1]", "::1", "testserver"} if testing
-                        else {"127.0.0.1", "localhost", "::1"}):
+        if host not in (
+            {"127.0.0.1", "localhost", "[::1]", "::1", "testserver"}
+            if testing
+            else {"127.0.0.1", "localhost", "::1"}
+        ):
             return JSONResponse({"detail": "Invalid local host"}, status_code=400)
         origin = request.headers.get("origin")
         if origin and origin != f"{request.url.scheme}://{request.headers.get('host')}":
@@ -116,25 +124,47 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
         return sorted(store.all("jobs").values(), key=lambda x: x["created_at"], reverse=True)
 
     def run_import(job_id):
-        command = ([sys.executable, "--worker"] if getattr(sys, "frozen", False)
-                   else [sys.executable, "-m", "openingroutes.worker"])
+        command = (
+            [sys.executable, "--worker"]
+            if getattr(sys, "frozen", False)
+            else [sys.executable, "-m", "openingroutes.worker"]
+        )
         try:
             with (root / "logs" / f"{job_id}.log").open("w", encoding="utf-8") as log:
-                result = subprocess.run([*command, str(root), job_id], timeout=600, stdout=log, stderr=log,
-                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                result = subprocess.run(
+                    [*command, str(root), job_id],
+                    timeout=600,
+                    stdout=log,
+                    stderr=log,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
             if result.returncode:
                 job = store.all("jobs")[job_id]
-                store.put("jobs", job_id, {**job, "status": "failed", "error": "Demo parsing failed. Check the local task log."})
+                store.put(
+                    "jobs",
+                    job_id,
+                    {**job, "status": "failed", "error": "Demo parsing failed. Check the local task log."},
+                )
         except subprocess.TimeoutExpired:
             job = store.all("jobs")[job_id]
-            store.put("jobs", job_id, {**job, "status": "failed", "error": "Parsing exceeded the 10 minute limit. Retry or use a smaller demo."})
+            store.put(
+                "jobs",
+                job_id,
+                {
+                    **job,
+                    "status": "failed",
+                    "error": "Parsing exceeded the 10 minute limit. Retry or use a smaller demo.",
+                },
+            )
 
     @app.post("/api/import", status_code=202)
-    async def import_demo(demo: UploadFile = File(), source: str = Form()):
+    async def import_demo(demo: Annotated[UploadFile, File()], source: Annotated[str, Form()]):
         try:
             validated = Source.model_validate_json(source)
         except ValidationError as e:
             raise HTTPException(422, "Complete the match source fields") from e
+        if validated.verified and not validated.reviewer:
+            raise HTTPException(422, "Reviewer required for source verification")
         if not demo.filename or not demo.filename.lower().endswith(".dem"):
             raise HTTPException(422, "Select a .dem file")
         if sum(j["status"] in ("queued", "parsing") for j in store.all("jobs").values()) >= 3:
@@ -157,8 +187,14 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
         except Exception:
             destination.unlink(missing_ok=True)
             raise
-        job = {"id": job_id, "status": "queued", "stage": "queued", "created_at": now(),
-               "source": validated.model_dump(), "size": total}
+        job = {
+            "id": job_id,
+            "status": "queued",
+            "stage": "queued",
+            "created_at": now(),
+            "source": validated.model_dump(),
+            "size": total,
+        }
         store.put("jobs", job_id, job)
         executor.submit(run_import, job_id)
         return job
@@ -198,8 +234,13 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
             raise HTTPException(404, "Round not found")
         if review.pro_video and not safe_url(review.pro_video):
             raise HTTPException(422, "Invalid video URL")
-        if review.approved and (not review.reviewer or not review.description or not review.pro_video
-                                or not r.get("complete") or r.get("review_required")):
+        if review.approved and (
+            not review.reviewer
+            or not review.description
+            or not review.pro_video
+            or not r.get("complete")
+            or r.get("review_required")
+        ):
             raise HTTPException(422, "Round requires completed evidence and no unresolved round warnings")
         store.put("round_reviews", round_id, review.model_dump())
         return review
@@ -219,18 +260,26 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
         return plan
 
     @app.post("/api/media")
-    async def upload_media(asset: UploadFile = File()):
+    async def upload_media(asset: Annotated[UploadFile, File()]):
         suffix = Path(asset.filename or "").suffix.lower()
         if suffix not in (".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm"):
             raise HTTPException(422, "Use PNG, JPEG, WebP, MP4 or WebM")
         content = await asset.read(250 * 1024**2 + 1)
         if len(content) > 250 * 1024**2:
             raise HTTPException(413, "Media exceeds 250 MiB")
-        valid = (suffix == ".png" and content.startswith(b"\x89PNG\r\n\x1a\n")
-                 or suffix in (".jpg", ".jpeg") and content.startswith(b"\xff\xd8\xff")
-                 or suffix == ".webp" and content.startswith(b"RIFF") and content[8:12] == b"WEBP"
-                 or suffix == ".mp4" and content[4:8] == b"ftyp"
-                 or suffix == ".webm" and content.startswith(b"\x1aE\xdf\xa3"))
+        valid = (
+            suffix == ".png"
+            and content.startswith(b"\x89PNG\r\n\x1a\n")
+            or suffix in (".jpg", ".jpeg")
+            and content.startswith(b"\xff\xd8\xff")
+            or suffix == ".webp"
+            and content.startswith(b"RIFF")
+            and content[8:12] == b"WEBP"
+            or suffix == ".mp4"
+            and content[4:8] == b"ftyp"
+            or suffix == ".webm"
+            and content.startswith(b"\x1aE\xdf\xa3")
+        )
         if not valid:
             raise HTTPException(422, "File content does not match the media type")
         name = hashlib.sha256(content).hexdigest() + suffix
@@ -244,8 +293,11 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
         except ValueError as e:
             raise HTTPException(422, str(e)) from e
         shutil.make_archive(str(path), "zip", path)
-        return {"version": path.name, "download": f"/api/exports/{path.name}",
-                "manifest": json.loads((path / "manifest.json").read_text(encoding="utf-8"))}
+        return {
+            "version": path.name,
+            "download": f"/api/exports/{path.name}",
+            "manifest": json.loads((path / "manifest.json").read_text(encoding="utf-8")),
+        }
 
     @app.get("/api/exports/{version}")
     def download_export(version: str):
