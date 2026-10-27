@@ -2,55 +2,58 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-A planned learning library for **T/CT opening map control, utility counters, and professional-player demonstrations**, built from professional-event demos and backed by a searchable, comprehensive utility catalog.
+**Learn CS2 openings from professional matches: T/CT map control and utility counters, pistol-round play, and professional-player demonstrations.**
 
-> **Status: direction updated; development deferred.** The 2026-10-27 update changes the READMEs and project plan only; no application code is being written. There is no application, installer, parsing experiment, or working demo yet. Continue improving [POVForge](https://github.com/Chester-chs/CS2-povforge) first and resume implementation only when explicitly requested.
+OpeningRoutes is a planned CS2 learning tool for players who want to study professional play systematically. It will organize routes, utility, team coordination, and footage from professional-event demos into searchable learning cases, with a desktop application and a functional web edition.
 
-## The idea
+> **Status: planning stage. No usable release is available yet.** The features below are development goals; there is currently no application download or live web experience.
 
-Learning to defend a position or contest an area early in the round involves equipment, throwing positions, timing, entry and support roles, responses to opposing utility, and movement after the throw.
+## Core features — planned
 
-OpeningRoutes will organize professional examples by map area and side, connecting individual throws, utility sequences, team coordination, full-round context, and practice instructions. It covers CT opening defense and re-clears as well as T opening control and responses to CT utility.
+### T/CT opening control and utility counters
 
-**Planned learning flow:**
+Study how both sides contest, hold, or regain an area, organized by map and location:
 
-Map → target area → T/CT → proactive control or a response → utility and coordination plan → professional demonstrations and instructional recreations → save for practice.
+- T-side utility, movement, and entry coordination for early map control.
+- CT opening defense, delay, denial, and re-clear plans.
+- Examples of responses to opposing smokes, flashes, incendiaries, and HE grenades.
+- Spawn positions, equipment, player count, throw order, timing, and subsequent positioning for each plan.
 
-**Planned content workflow:**
+### Professional player and team pistol-round play
 
-Import professional-event demos and sources → extract utility and full-round context → group throw variants and plans → manually verify purpose and execution → produce demonstrations and instructions → publish to the local learning library.
+Browse professional pistol rounds independently on both T and CT sides, comparing players and teams across matches:
 
-## Planned core capabilities
+- Equipment allocation, opening positions, individual routes, and team setups.
+- Utility coordination, attacking or defensive tempo, opening kills, and first deaths.
+- Bomb plants, subsequent rotations, and round outcomes.
+- Successful and unsuccessful examples, with original match footage and sample statistics.
 
-- **T/CT opening control and counters:** organize T contests, CT denial or delay, T responses to defensive utility, and CT re-clears around the same area. Explain conditions and opposing actions without promising that a fixed plan always works.
-- **Comprehensive utility catalog:** organize available smoke, flash, incendiary/molotov, HE, and other throw records from imported matches. Search by map, area, side, purpose, type, player, and team. Area-based lessons and individual-throw lookup use the same content.
-- **Throw variants and coordinated plans:** organize a shared purpose into distinct throw methods with professional examples. Separately record solo or team combinations, order, intervals, and responsibilities. A shared landing point does not automatically mean an identical throw.
-- **Professional-player demonstrations:** compare real examples from different players and teams, retaining movement before release, the throw, utility effects, and subsequent positioning, with match and round references.
-- **Practice-ready instructions:** show standing and aiming references, throwing technique, timing, movement, and common mistakes. Clearly distinguish original professional-match footage from instructional recreations and label map/game versions and verification status.
-- **Conditions and coordination:** retain spawn position, equipment, player count, teammate requirements, and observable opponent actions. Distinguish solo routines from coordinated ones.
-- **Full context and cross-match comparisons:** support all available players, formal rounds, and full-round timelines in imported matches. Retain individual/team routes, selected T-default segments, and pistol-round studies.
-- **Evidence and learning notes:** show sample counts, date ranges, and successful and unsuccessful examples. Keep observations, tactical interpretations, and practice goals separate.
+### Comprehensive utility catalog and throw variants
 
-## Example and coverage boundaries
+Organize smoke, flash, incendiary/molotov, HE, and other utility from imported professional matches. Search by map, area, side, purpose, player, and team.
 
-An area page such as “Ancient → 黑屋 (community callout; exact area to be confirmed)” could organize T opening contests, CT delay or denial, T responses, CT re-clears, and professional throw variants within each plan. This is an information-architecture example, not a verified tactical recipe. Equipment, throw order, and counter instructions require match review and reproduction before becoming teaching content.
+Compare standing positions, aiming references, release techniques, and timing for the same purpose, with examples from the professionals who use them. Individual throws link to solo sequences or coordinated team plans so that a lineup can be studied in the context of a complete play.
 
-“Comprehensive” means systematic organization of imported data with expanding coverage, not a claim to include every possible lineup on every map. Show covered maps, matches, periods, missing fields, and unverified entries.
+### Professional demonstrations and practice instructions
 
-Professional statistics use verifiable professional-event demos only; a professional player's ranked matchmaking demo does not qualify. Instructional recreations are labeled separately and excluded from professional usage counts.
+Watch preparation, throws, coordination, and subsequent movement in real professional matches, alongside standing and aiming references, execution steps, and instructional recreations.
 
-The product is not limited to one player, two or three rounds, or the first 30 seconds. Openings are the main learning entry point, while later re-clears and context remain accessible. Maps and content can be delivered in stages; validation sample sizes are not product limits.
+Original match footage and instructional recreations are labeled separately, retaining match sources, rounds, map versions, and verification status. Save cases and record observations and practice goals.
 
-## Proposed technical direction
+## Ways to learn
 
-Python, [demoparser2](https://github.com/LaihoE/demoparser), map visualization, and a local interface are proposed. Frameworks, storage, and performance targets remain undecided until development resumes.
+- **By area:** map → area → T/CT → control or counter plan → utility and professional demonstrations.
+- **By pistol round:** map → player or team → T/CT → equipment, routes, and coordination → round comparisons.
+- **By utility:** map → grenade type or purpose → throw variants → professional examples and instructions.
 
-First validate utility and full-round data from professional demos, then build throw grouping, catalog search, professional demonstrations, area-based control/counter plans, instructions, and saved learning cases. Execution, utility effects, area purpose, and counter interpretations require review. Missing data must remain explicit. Usage frequency or round win rate does not establish the best throw or a causal counter.
+The desktop application and functional web edition will share the core learning paths for utility lookup, pistol-round study, and professional demonstrations.
 
-POVForge may later help produce player/round clips, but an integration has not been designed or implemented.
+## Data and content
 
-## Planning and references
+Analysis uses verifiable professional-event demos. Multiple players, full rounds, and cross-match comparisons retain the context of CT defensive setups, T defaults, and subsequent movement.
 
-See the [Chinese project plan](docs/project-plan.zh-CN.md) for scope, content structure, staged delivery, and acceptance criteria.
+The utility catalog will expand as matches are imported and content is curated, with map coverage, match periods, and verification status shown explicitly. Statistics retain both wins and losses and show usage counts, sample sizes, and sources; instructional recreations are managed separately. Examples support learning and comparison, with their use depending on spawn position, equipment, and teammate coordination.
 
-[nades.ai](https://nades.ai/about) and its [utility combinations](https://nades.ai/combos), [CS2.CAM](https://cs2.cam/), and [CS Demo Manager](https://cs-demo-manager.com/docs/guides/2d-viewer) are references. Existing tools already cover overlapping capabilities. This project focuses on a Chinese-language personal learning workflow for area control and counters; differentiation and learning benefits remain unvalidated.
+## Project documentation
+
+- [Project plan — Chinese](docs/project-plan.zh-CN.md): product scope, content organization, and acceptance criteria.
