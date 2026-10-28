@@ -4,11 +4,13 @@
 
 **Learn CS2 openings from professional matches: T/CT map control and utility counters, pistol-round play, and professional-player demonstrations.**
 
-OpeningRoutes is a planned CS2 learning tool for players who want to study professional play systematically. It will organize routes, utility, team coordination, and footage from professional-event demos into searchable learning cases, with a desktop application and a functional web edition.
+OpeningRoutes is a CS2 learning tool in development for players who want to study professional play systematically. It extracts routes and utility from professional-event demos and combines match evidence with verified instruction, with a Windows application and a functional web edition.
 
-> **Status: planning stage. No usable release is available yet.** The features below are development goals; there is currently no application download or live web experience.
+> **Status: v0.2.0 local development preview.** Real demo extraction, area-based utility search, lineup variants with manual merge/split, full-round routes, independent pistol-round study with abnormal-round review, teaching curation and reviewed-content export are implemented. Complete tutorials require match footage, visual instructions and in-game reproduction; extracted records are not presented as verified tutorials. No public release download or hosted service is available yet.
 
-## Core features — planned
+See the [usage guide (Chinese)](docs/usage.zh-CN.md) for running the application, importing demos, curating instruction and preparing web content. The scope below includes implemented foundations and content goals still being developed.
+
+## Core features and content goals
 
 ### T/CT opening control and utility counters
 
@@ -18,6 +20,14 @@ Study how both sides contest, hold, or regain an area, organized by map and loca
 - CT opening defense, delay, denial, and re-clear plans.
 - Examples of responses to opposing smokes, flashes, incendiaries, and HE grenades.
 - Spawn positions, equipment, player count, throw order, timing, and subsequent positioning for each plan.
+
+### CT defensive research (based on TAGNet)
+
+The **CT 防守研究** page groups professional CT rounds into defensive setups and learns each team's and player's habits:
+
+- Setups follow the pipeline of TAGNet (Zhang et al., *IEEE Transactions on Games*, 2026, [doi:10.1109/TG.2026.3745970](https://doi.org/10.1109/TG.2026.3745970); [code](https://github.com/zhangx1ang03620/TAGNet-CS2), MIT): CT counts per area at 10/12/15/18/20 s, K-Means with K chosen by silhouette/DBI/CH ranks, the paper's naming thresholds, and chi-square context tests with Holm correction.
+- Extensions: the paper's own count baseline as the main method (more stable than the network in its ablation and in our re-run), learned player spots, per-team setup/role/rotation/utility habits versus the league, bootstrap stability, and Mirage/Ancient/Dust2 coverage.
+- Method, experiments and limits: [docs/ct-research.zh-CN.md](docs/ct-research.zh-CN.md).
 
 ### Professional player and team pistol-round play
 
@@ -56,4 +66,5 @@ The utility catalog will expand as matches are imported and content is curated, 
 
 ## Project documentation
 
+- [CT defensive research — Chinese](docs/ct-research.zh-CN.md): TAGNet citation, what is reused and what is extended, comparison experiments, reproduction record.
 - [Project plan — Chinese](docs/project-plan.zh-CN.md): product scope, content organization, and acceptance criteria.
