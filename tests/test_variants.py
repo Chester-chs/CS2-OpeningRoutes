@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from openingroutes.api import create_app
 from openingroutes.places import place_label
 from openingroutes.store import Store
-from openingroutes.variants import cluster
+from openingroutes.variants import cluster, same_lineup
 from tests.test_workflow import auth
 
 
@@ -72,6 +72,24 @@ def test_same_lineup_by_different_players_groups_and_different_release_splits():
     assert by_member["t1"]["source"] == "auto" and by_member["t1"]["players"] == ["Alice", "Bob"]
     # deterministic ids anchored on the earliest member
     assert cluster(list(reversed(rows)), [])[0]["id"] in {g["id"] for g in groups}
+
+
+def test_malformed_throws_never_join_a_lineup():
+    good = throw("t1", "Alice")
+    assert same_lineup(good, throw("t2", "Bob"))
+    malformed = [
+        {**throw("t2", "Bob"), "view": None},
+        {**throw("t3", "Bob"), "view": ["yaw", 90]},  # not a dict: skipped, not an error
+        {**throw("t4", "Bob"), "view": {"yaw": "90", "pitch": -10.0}},
+        {**throw("t5", "Bob"), "position": None},
+        {**throw("t6", "Bob"), "position": [0, 0]},  # needs z
+        {**throw("t7", "Bob"), "position": [0, True, 0]},
+        {**throw("t8", "Bob"), "effect_position": "1000,0"},
+    ]
+    for row in malformed:
+        assert not same_lineup(good, row) and not same_lineup(row, good), row["id"]
+    groups = cluster([good, *malformed], [])
+    assert sorted(len(g["members"]) for g in groups) == [1] * 8
 
 
 def test_manual_variants_override_auto_clustering():
