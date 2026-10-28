@@ -78,12 +78,35 @@ def cluster(throws: list[dict], stored: list[dict]) -> list[dict]:
             assigned.update(members)
             groups.append(_describe(record["id"], "manual", members, rows, record))
     auto: list[list[str]] = []
+    # Groups are indexed by the grid cell of their first member's release point, so each throw
+    # only checks nearby groups; the result is the same as scanning every group in order.
+    index: dict[tuple, list[int]] = {}
     for row in sorted((t for t in throws if t["id"] not in assigned), key=_order):
-        home = next((g for g in auto if same_lineup(rows[g[0]], row)), None)
+        pos = _num(row.get("position"), 2)
+        cell = None
+        if pos:
+            cell = (
+                row.get("map"),
+                row.get("kind"),
+                row.get("side"),
+                math.floor(pos[0] / ORIGIN_RADIUS),
+                math.floor(pos[1] / ORIGIN_RADIUS),
+            )
+        home = None
+        if cell:
+            nearby = sorted(
+                g
+                for dx in (-1, 0, 1)
+                for dy in (-1, 0, 1)
+                for g in index.get((*cell[:3], cell[3] + dx, cell[4] + dy), ())
+            )
+            home = next((g for g in nearby if same_lineup(rows[auto[g][0]], row)), None)
         if home is None:
             auto.append([row["id"]])
+            if cell:
+                index.setdefault(cell, []).append(len(auto) - 1)
         else:
-            home.append(row["id"])
+            auto[home].append(row["id"])
     for members in auto:
         group_id = "auto-" + hashlib.sha1(members[0].encode()).hexdigest()[:12]
         groups.append(_describe(group_id, "auto", members, rows, meta.get(group_id, {})))

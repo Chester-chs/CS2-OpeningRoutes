@@ -58,7 +58,8 @@ class VariantMeta(BaseModel):
 
 class PlaceLabel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    label: str = Field(min_length=1, max_length=60)
+    label: str | None = Field(default=None, min_length=1, max_length=60)
+    area: Literal["A", "B", "Mid", "CT", "other"] | None = None
 
 
 class Step(BaseModel):
@@ -423,8 +424,16 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
     def label_place(map_name: str, place: str, body: PlaceLabel):
         if not valid_place(map_name, place):
             raise HTTPException(422, "Invalid map or place name")
-        store.put("places", f"{map_name}:{place}", {"label": body.label})
-        return {"map": map_name, "place": place, "label": body.label}
+        if body.label is None and body.area is None:
+            raise HTTPException(422, "Provide a label or an area")
+        key = f"{map_name}:{place}"
+        value = dict(store.all("places").get(key) or {})
+        if body.label is not None:
+            value["label"] = body.label
+        if body.area is not None:
+            value["area"] = body.area
+        store.put("places", key, value)
+        return {"map": map_name, "place": place, **value}
 
     @app.put("/api/plans/{plan_id}")
     def save_plan(plan_id: str, plan: Plan):

@@ -1981,7 +1981,7 @@ footer span {
 }
 .place-table label {
   display: grid;
-  grid-template-columns: minmax(110px, 1fr) 56px minmax(120px, 2fr) auto;
+  grid-template-columns: minmax(110px, 1fr) 56px minmax(120px, 2fr) auto 120px;
   gap: 10px;
   align-items: center;
 }
@@ -1991,5 +1991,203 @@ footer span {
   }
   .place-table input {
     grid-column: 1 / -1;
+  }
+}
+
+/* CT 防守研究 */
+.map-chips {
+  margin-top: 0;
+}
+button.chip {
+  cursor: pointer;
+  font-size: 12px;
+}
+.chip.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.chip.strong {
+  border-color: #7e633b;
+  color: var(--amber);
+}
+.pattern-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 17px;
+}
+.pattern-card h3,
+.team-habits h3,
+.method h3 {
+  margin: 19px 0 0;
+  font-size: 12px;
+  color: #a6b3a9;
+}
+.pattern-card .section-line {
+  align-items: flex-start;
+  margin-bottom: 0;
+}
+.pattern-facts {
+  display: flex;
+  gap: 21px;
+  margin: 13px 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.pattern-facts strong {
+  font-size: 21px;
+  color: #edf0e9;
+  font-weight: 500;
+  margin-right: 4px;
+}
+.share-stack {
+  display: grid;
+  gap: 6px;
+}
+.share-row {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+.share-bar {
+  display: flex;
+  height: 20px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #101513;
+}
+.share-bar span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #101513;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.area-A {
+  background: #dcb26c;
+}
+.area-B {
+  background: #94cad3;
+}
+.area-Mid {
+  background: #b6e3bd;
+}
+.area-CT {
+  background: #6f8f78;
+}
+.area-other {
+  background: #4a564d;
+}
+.pattern-meta {
+  margin-top: 15px;
+  line-height: 1.8;
+}
+.card-actions {
+  display: flex;
+  gap: 17px;
+  margin-top: 13px;
+  flex-wrap: wrap;
+}
+.mix-bars {
+  display: grid;
+  gap: 8px;
+  margin-top: 11px;
+}
+.mix-bar {
+  display: grid;
+  grid-template-columns: minmax(120px, 260px) 1fr 82px;
+  gap: 11px;
+  align-items: center;
+}
+.mix-bar > div {
+  position: relative;
+  height: 14px;
+  background: #101513;
+  border-radius: 3px;
+}
+.mix-bar i,
+.mix-bar em {
+  position: absolute;
+  left: 0;
+  height: 100%;
+  border-radius: 3px;
+}
+.mix-bar i {
+  background: var(--accent);
+  opacity: 0.85;
+}
+.mix-bar em {
+  border-right: 2px solid var(--amber);
+  height: 20px;
+  top: -3px;
+}
+.role-table {
+  display: grid;
+  margin-top: 11px;
+  font-size: 12px;
+  overflow-x: auto;
+}
+.role-table > div {
+  display: grid;
+  grid-template-columns: 110px 2fr 80px 2fr;
+  gap: 13px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  min-width: 560px;
+}
+.context-table > div,
+.method .role-table > div {
+  grid-template-columns: 1.3fr 1fr 1fr 1fr 1.5fr;
+}
+.role-table .role-head {
+  color: var(--muted);
+  font-size: 11px;
+}
+.role-table .chosen {
+  color: var(--accent);
+}
+.spot-map {
+  width: 100%;
+  max-width: 860px;
+  display: block;
+  margin: 0 auto;
+}
+.spot-map circle {
+  fill: rgba(148, 202, 211, 0.35);
+  stroke: #94cad3;
+}
+.spot-map text {
+  fill: #c9d4cb;
+  font-size: 12px;
+  paint-order: stroke;
+  stroke: #17211a;
+  stroke-width: 3px;
+}
+.team-habits .section-line select {
+  max-width: 260px;
+}
+.method p,
+.method li {
+  font-size: 13px;
+  line-height: 1.8;
+}
+.method ul {
+  margin: 8px 0 0;
+  padding-left: 19px;
+}
+.method h2 {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+@media (max-width: 760px) {
+  .pattern-grid {
+    grid-template-columns: 1fr;
+  }
+  .mix-bar {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 }

@@ -21,6 +21,14 @@ Study how both sides contest, hold, or regain an area, organized by map and loca
 - Examples of responses to opposing smokes, flashes, incendiaries, and HE grenades.
 - Spawn positions, equipment, player count, throw order, timing, and subsequent positioning for each plan.
 
+### CT defensive research (based on TAGNet)
+
+The **CT 防守研究** page groups professional CT rounds into defensive setups and learns each team's and player's habits:
+
+- Setups follow the pipeline of TAGNet (Zhang et al., *IEEE Transactions on Games*, 2026, [doi:10.1109/TG.2026.3745970](https://doi.org/10.1109/TG.2026.3745970); [code](https://github.com/zhangx1ang03620/TAGNet-CS2), MIT): CT counts per area at 10/12/15/18/20 s, K-Means with K chosen by silhouette/DBI/CH ranks, the paper's naming thresholds, and chi-square context tests with Holm correction.
+- Extensions: the paper's own count baseline as the main method (more stable than the network in its ablation and in our re-run), learned player spots, per-team setup/role/rotation/utility habits versus the league, bootstrap stability, and Mirage/Ancient/Dust2 coverage.
+- Method, experiments and limits: [docs/ct-research.zh-CN.md](docs/ct-research.zh-CN.md).
+
 ### Professional player and team pistol-round play
 
 Browse professional pistol rounds independently on both T and CT sides, comparing players and teams across matches:
@@ -58,4 +66,5 @@ The utility catalog will expand as matches are imported and content is curated, 
 
 ## Project documentation
 
+- [CT defensive research — Chinese](docs/ct-research.zh-CN.md): TAGNet citation, what is reused and what is extended, comparison experiments, reproduction record.
 - [Project plan — Chinese](docs/project-plan.zh-CN.md): product scope, content organization, and acceptance criteria.

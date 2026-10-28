@@ -11,6 +11,7 @@ import pandas as pd
 from demoparser2 import DemoParser
 
 from .domain import build_rounds, side
+from .formations import FORMATIONS_VERSION, canonical_teams, extract_formations, finalize_formations
 from .store import Store, now
 
 KINDS = {
@@ -46,6 +47,9 @@ EVENTS = [
 
 
 def records(frame):
+    """Rows of a parser result; demoparser2 returns a plain list for events absent from a demo."""
+    if not hasattr(frame, "to_json"):
+        return list(frame or [])
     return json.loads(frame.to_json(orient="records"))
 
 
@@ -97,13 +101,24 @@ def annotate_places(parser, throws: list[dict], observed=None) -> int:
 
 
 def enrich_places(path: Path, store: Store) -> dict:
-    """Add callouts to a match imported before place support, without re-importing it."""
+    """Add callouts and CT formations to a match imported before they existed, without re-importing it."""
     match_id = file_hash(path)[:20]
     match = store.all("matches").get(match_id)
     if match is None:
         raise ValueError("This demo has not been imported")
-    annotate_places(DemoParser(str(path)), match["throws"])
-    match["places_version"] = PLACES_VERSION
+    parser = DemoParser(str(path))
+    if match.get("places_version") != PLACES_VERSION:
+        annotate_places(parser, match["throws"])
+        match["places_version"] = PLACES_VERSION
+    if match.get("formations_version") != FORMATIONS_VERSION:
+        clans = [e.get("team") for r in match["rounds"] for e in r.get("equipment", [])]
+        match["team_aliases"] = canonical_teams(clans, match["source"].get("match", ""))
+        match["formations"] = finalize_formations(
+            extract_formations(parser, match["rounds"], match["tick_rate"]),
+            match["rounds"],
+            match["team_aliases"],
+        )
+        match["formations_version"] = FORMATIONS_VERSION
     store.save_match(match)
     return match
 
@@ -114,7 +129,10 @@ def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: 
     match_id = sha[:20]
     existing = store.all("matches").get(match_id)
     if existing is not None:
-        if existing.get("places_version") != PLACES_VERSION:
+        if (
+            existing.get("places_version") != PLACES_VERSION
+            or existing.get("formations_version") != FORMATIONS_VERSION
+        ):
             progress("places")
             return enrich_places(path, store)
         return existing
@@ -325,6 +343,10 @@ def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: 
                 "players": routes,
             },
         )
+    progress("formations")
+    clans = [e.get("team") for r in rounds for e in r.get("equipment", [])]
+    aliases = canonical_teams(clans, source.get("match", ""))
+    formations = finalize_formations(extract_formations(parser, rounds, rate), rounds, aliases)
     unmatched = sum(t["trajectory_status"] == "unmatched" for t in throws)
     if unmatched:
         warnings.append(f"{unmatched} throws have no unambiguous projectile match")
@@ -335,6 +357,9 @@ def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: 
         "sha256": sha,
         "parser_version": version("demoparser2"),
         "places_version": PLACES_VERSION,
+        "formations_version": FORMATIONS_VERSION,
+        "formations": formations,
+        "team_aliases": aliases,
         "game_version": header.get("patch_version", "unknown"),
         "tick_rate": rate,
         "route_sample_hz": rate / stride,

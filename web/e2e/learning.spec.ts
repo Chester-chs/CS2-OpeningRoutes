@@ -81,3 +81,21 @@ test("areas, lineup variants and curator queues are usable", async ({
     page.getByRole("heading", { name: "异常回合复核" }),
   ).toBeVisible();
 });
+
+test("CT defence research shows patterns, method and round formation", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "CT 防守研究", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "CT 防守研究", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".pattern-card").first()).toBeVisible();
+  await page.getByRole("tab", { name: "情境检验" }).click();
+  await expect(page.getByRole("table", { name: "情境检验" })).toBeVisible();
+  await page.getByRole("tab", { name: "方法与引用" }).click();
+  await expect(page.getByText("10.1109/TG.2026.3745970")).toBeVisible();
+  await page.getByRole("tab", { name: "防守阵型" }).click();
+  await page.getByRole("button", { name: "代表回合" }).first().click();
+  await expect(page.getByText(/CT 开局站位/)).toBeVisible();
+});

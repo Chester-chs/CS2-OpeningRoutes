@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Download, FileUp, RefreshCw, ShieldCheck } from "lucide-react";
+import { AREA_NAMES } from "./CTPatterns";
 import { DataClient } from "./data";
 import type { Catalog, Job, Source } from "./types";
 
@@ -324,6 +325,7 @@ function PlaceVocabulary({
       for (const place of [t.origin_place, t.effect_place])
         if (place) counts.set(place, (counts.get(place) || 0) + 1);
   const labels = catalog.places?.[map] || {};
+  const areas = catalog.place_areas?.[map] || {};
   return (
     <section className="panel wide">
       <div className="section-line">
@@ -342,7 +344,8 @@ function PlaceVocabulary({
       </div>
       <p className="muted">
         区域名来自 Demo
-        的地图点位名。社区中文叫法（如“黑屋”）请核对后在这里填写，系统不会自动猜测。
+        的地图点位名。社区中文叫法（如“黑屋”）请核对后在这里填写，系统不会自动猜测。右侧的战术区域（A
+        区 / B 区 / 中路 / CT 后场）决定 CT 防守研究里的人数统计。
       </p>
       {counts.size === 0 ? (
         <p className="muted">
@@ -384,6 +387,34 @@ function PlaceVocabulary({
                 >
                   保存
                 </button>
+                <select
+                  aria-label={`${place} 属于哪个战术区域`}
+                  value={areas[place] || ""}
+                  onChange={async (e) => {
+                    const area = e.target.value;
+                    if (!area) return;
+                    try {
+                      await client.write(
+                        `places/${encodeURIComponent(map)}/${encodeURIComponent(place)}`,
+                        "PUT",
+                        { area },
+                      );
+                      setMessage(
+                        `已把 ${place} 归入 ${AREA_NAMES[area]}，CT 阵型将重新计算`,
+                      );
+                      onRefresh();
+                    } catch (err) {
+                      setMessage((err as Error).message);
+                    }
+                  }}
+                >
+                  <option value="">未归入区域</option>
+                  {Object.entries(AREA_NAMES).map(([id, name]) => (
+                    <option key={id} value={id}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
               </label>
             ))}
         </div>

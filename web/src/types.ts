@@ -103,6 +103,14 @@ export type Round = {
   };
   excluded?: boolean;
   resolution?: string;
+  ct_pattern?: number;
+  formation?: {
+    ct_team: string | null;
+    t_team: string | null;
+    complete: boolean;
+    context: Record<string, string | number | boolean | null>;
+    snapshots: { second: number; ct: FormationPlayer[] }[];
+  };
 };
 export type Plan = {
   id: string;
@@ -124,6 +132,122 @@ export type Catalog = {
   plans: Plan[];
   variants?: Variant[];
   places?: Record<string, Record<string, string>>;
+  place_areas?: Record<string, Record<string, string>>;
+  ct_patterns?: Record<string, CTAnalysis>;
+};
+export type AreaShares = Record<string, number>;
+export type CTPattern = {
+  id: number;
+  name: string;
+  name_en: string;
+  paper_name: string;
+  paper_name_en: string;
+  emphasis?: string;
+  rationale: string;
+  name_source: string;
+  rounds: number;
+  ct_wins: number;
+  decided: number;
+  ct_win_rate: number | null;
+  shares: Record<string, AreaShares>;
+  setups: { setup: string; rounds: number }[];
+  top_places: { place: string; share: number }[];
+  economy: Record<string, number>;
+  teams: Record<string, number>;
+  utility_per_round: { kind: string; area: string; per_round: number }[];
+  representative: string;
+  round_ids: string[];
+};
+export type ContextTest = {
+  variable: string;
+  chi2: number | null;
+  dof: number;
+  p_value: number | null;
+  p_holm: number | null;
+  cramers_v: number | null;
+  min_expected: number | null;
+  reliable: boolean;
+  n: number;
+  categories: string[];
+  table: number[][];
+};
+export type TeamHabit = {
+  team: string;
+  rounds: number;
+  matches: number;
+  ct_win_rate: number | null;
+  pattern_shares: number[];
+  league_shares: number[];
+  differs_from_league: {
+    chi2: number | null;
+    p_value: number | null;
+    p_holm: number | null;
+    cramers_v: number | null;
+    min_expected: number | null;
+  };
+  top_setups: { setup: string; rounds: number; share: number }[];
+  roles: {
+    player: string;
+    rounds: number;
+    consistency: number;
+    spots: { spot: string; share: number }[];
+    rotations: { move: string; share: number }[];
+  }[];
+  utility_per_round: {
+    kind: string;
+    area: string;
+    per_round: number;
+    league_per_round: number;
+  }[];
+};
+export type CTAnalysis = {
+  map: string;
+  method: string;
+  citation: {
+    title: string;
+    authors: string;
+    venue: string;
+    doi: string;
+    url: string;
+    code: string;
+  };
+  rounds: number;
+  matches: number;
+  teams: string[];
+  snapshot_seconds: number[];
+  k?: number;
+  stability_ari?: number | null;
+  quality?: Record<string, number | null>;
+  patterns: CTPattern[];
+  k_selection: {
+    k: number;
+    silhouette: number | null;
+    davies_bouldin: number | null;
+    calinski_harabasz: number | null;
+    mean_rank: number | null;
+    eligible: boolean;
+  }[];
+  context_tests?: ContextTest[];
+  spots?: {
+    id: number;
+    name: string;
+    place: string;
+    x: number;
+    y: number;
+    z: number;
+    points: number;
+  }[];
+  team_habits?: TeamHabit[];
+  warnings: string[];
+};
+export type FormationPlayer = {
+  player: string;
+  place: string | null;
+  x: number;
+  y: number;
+  z: number;
+  alive: boolean;
+  equip: number;
 };
 export type Filters = {
   query?: string;

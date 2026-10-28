@@ -13,6 +13,36 @@ def now():
     return datetime.now(UTC).isoformat()
 
 
+def _finite(value):
+    """JSON responses reject inf/NaN (e.g. Calinski-Harabasz on perfectly separated clusters)."""
+    if isinstance(value, float) and (value != value or value in (float("inf"), float("-inf"))):
+        return None
+    if isinstance(value, dict):
+        return {k: _finite(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_finite(v) for v in value]
+    return value
+
+
+def compact_formation(formation: dict) -> dict:
+    return {
+        "ct_team": formation.get("ct_team"),
+        "t_team": formation.get("t_team"),
+        "complete": formation.get("complete"),
+        "context": formation.get("context", {}),
+        "snapshots": [
+            {
+                "second": s["second"],
+                "ct": [
+                    {k: p.get(k) for k in ("player", "place", "x", "y", "z", "alive", "equip")}
+                    for p in s["ct"]
+                ],
+            }
+            for s in formation.get("snapshots", [])
+        ],
+    }
+
+
 class Store:
     def __init__(self, root: Path):
         self.root = Path(root)
@@ -66,12 +96,77 @@ class Store:
     def save_teaching(self, throw_id, teaching):
         self.put("teachings", throw_id, teaching)
 
-    def place_overrides(self):
+    def place_overrides(self, field: str = "label"):
         overrides: dict[str, dict[str, str]] = {}
         for key, value in self.all("places").items():
             map_name, _, place = key.partition(":")
-            overrides.setdefault(map_name, {})[place] = value["label"]
+            if value.get(field):
+                overrides.setdefault(map_name, {})[place] = value[field]
         return overrides
+
+    _pattern_cache: dict = {}
+
+    def ct_patterns(self, matches, rounds_by_id, throws):
+        """TAGNet-style CT pattern analysis per map, cached on the inputs that affect it."""
+        import hashlib
+
+        from .patterns import ANALYSIS_VERSION, analyze_map
+
+        areas = self.place_overrides("area")
+        by_map: dict[str, list] = {}
+        for match in matches:
+            if not match["source"].get("verified"):
+                continue
+            for round_id, formation in (match.get("formations") or {}).items():
+                row = rounds_by_id.get(round_id)
+                if row is None or row.get("excluded"):
+                    continue
+                by_map.setdefault(match["map"], []).append(formation)
+        key = hashlib.sha256(
+            json.dumps(
+                [
+                    ANALYSIS_VERSION,
+                    sorted(
+                        (m["id"], m.get("formations_version")) for m in matches if m["source"].get("verified")
+                    ),
+                    areas,
+                    self.place_overrides(),
+                    sorted(r for r, v in rounds_by_id.items() if v.get("excluded")),
+                ],
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()
+        cached = Store._pattern_cache.get(str(self.db))
+        if cached and cached[0] == key:
+            return cached[1]
+        # The analysis takes minutes on a full library, so it is also kept on disk.
+        disk = self.root / "cache" / "ct_patterns.json"
+        try:
+            stored = json.loads(disk.read_text(encoding="utf-8"))
+            if stored.get("key") == key:
+                Store._pattern_cache[str(self.db)] = (key, stored["result"])
+                return stored["result"]
+        except (OSError, ValueError, AttributeError):
+            pass
+        result = {
+            map_name: analyze_map(
+                map_name,
+                sorted(f, key=lambda x: x["round_id"]),
+                [t for t in throws if t.get("map") == map_name],
+                areas,
+            )
+            for map_name, f in sorted(by_map.items())
+        }
+        result = _finite(json.loads(json.dumps(result)))
+        Store._pattern_cache[str(self.db)] = (key, result)
+        try:
+            disk.parent.mkdir(exist_ok=True)
+            tmp = disk.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"key": key, "result": result}), encoding="utf-8")
+            tmp.replace(disk)
+        except OSError:
+            pass
+        return result
 
     def catalog(self):
         from .domain import effective_round, teaching_gaps
@@ -88,9 +183,15 @@ class Store:
             "plans": list(self.all("plans").values()),
         }
         for match in self.all("matches").values():
-            catalog["matches"].append({k: v for k, v in match.items() if k not in ("rounds", "throws")})
+            catalog["matches"].append(
+                {k: v for k, v in match.items() if k not in ("rounds", "throws", "formations")}
+            )
+            formations = match.get("formations") or {}
             for row in match["rounds"]:
-                catalog["rounds"].append(effective_round(row, reviews.get(row["id"], {})))
+                entry = effective_round(row, reviews.get(row["id"], {}))
+                if row["id"] in formations:
+                    entry["formation"] = compact_formation(formations[row["id"]])
+                catalog["rounds"].append(entry)
             for row in match["throws"]:
                 t = teachings.get(row["id"], {})
                 catalog["throws"].append(
@@ -109,6 +210,19 @@ class Store:
         catalog["variants"] = variants
         maps = {m["map"] for m in catalog["matches"]} | set(overrides)
         catalog["places"] = {m: {**GENERIC, **overrides.get(m, {})} for m in sorted(maps)}
+        from .patterns import DEFAULT_MACRO
+
+        area_overrides = self.place_overrides("area")
+        catalog["place_areas"] = {
+            m: {**DEFAULT_MACRO.get(m, {}), **area_overrides.get(m, {})} for m in sorted(maps)
+        }
+        rounds_by_id = {r["id"]: r for r in catalog["rounds"]}
+        analyses = self.ct_patterns(list(self.all("matches").values()), rounds_by_id, catalog["throws"])
+        catalog["ct_patterns"] = {}
+        for map_name, analysis in analyses.items():
+            catalog["ct_patterns"][map_name] = {k: v for k, v in analysis.items() if k != "assignments"}
+            for round_id, pattern in analysis.get("assignments", {}).items():
+                rounds_by_id[round_id]["ct_pattern"] = pattern
         return catalog
 
     def timeline(self, round_id):

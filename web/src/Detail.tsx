@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Bookmark, Check, ExternalLink, Save, X } from "lucide-react";
+import { AREA_NAMES, placeName } from "./CTPatterns";
 import {
   DataClient,
   kindNames,
@@ -458,6 +459,7 @@ export default function Detail({
               </section>
             )}
             <RoundFacts round={round} catalog={catalog} />
+            <RoundFormation round={round} catalog={catalog} />
             {client.mode === "desktop" && kind === "round" && (
               <section className="editor">
                 <h3>审核回合教学</h3>
@@ -630,6 +632,72 @@ export default function Detail({
         </section>
       </div>
     </dialog>
+  );
+}
+
+function RoundFormation({
+  round,
+  catalog,
+}: {
+  round: Round;
+  catalog: Catalog;
+}) {
+  const f = round.formation;
+  if (!f?.snapshots?.length) return null;
+  const map = catalog.matches.find((m) => m.id === round.match_id)?.map || "";
+  const pattern =
+    round.ct_pattern === undefined
+      ? undefined
+      : catalog.ct_patterns?.[map]?.patterns.find(
+          (p) => p.id === round.ct_pattern,
+        );
+  const areas = catalog.place_areas?.[map] || {};
+  const snaps = f.snapshots.filter((s) => [10, 15, 20].includes(s.second));
+  const players = snaps[0].ct.map((p) => p.player);
+  return (
+    <section>
+      <div className="section-line">
+        <h3>CT 开局站位（{f.ct_team || "CT"}）</h3>
+        <span className="micro">
+          {pattern ? `所属阵型：${pattern.name}` : "未参与阵型统计"}
+        </span>
+      </div>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>选手</th>
+              {snaps.map((s) => (
+                <th key={s.second}>{s.second} 秒</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {players.map((name) => (
+              <tr key={name}>
+                <td>{name}</td>
+                {snaps.map((s) => {
+                  const p = s.ct.find((x) => x.player === name);
+                  const place = p?.place || "";
+                  return (
+                    <td key={s.second}>
+                      {!p
+                        ? "—"
+                        : !p.alive
+                          ? "阵亡"
+                          : `${AREA_NAMES[areas[place]] || "其他"} · ${placeName(catalog, map, place || "未知")}`}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="micro">
+        时间从冻结结束起算；区域划分与 CT 防守研究页相同，可在数据管理里修改。
+      </p>
+    </section>
   );
 }
 
