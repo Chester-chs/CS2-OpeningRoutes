@@ -291,11 +291,12 @@ wheels = [
 
 [[package]]
 name = "openingroutes"
-version = "0.1.0"
+version = "0.2.0"
 source = { virtual = "." }
 dependencies = [
     { name = "demoparser2" },
     { name = "fastapi" },
+    { name = "numpy" },
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "python-multipart" },
@@ -317,6 +318,7 @@ requires-dist = [
     { name = "demoparser2", specifier = "==0.42.1" },
     { name = "fastapi", specifier = "==0.162.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = "==0.28.1" },
+    { name = "numpy", specifier = "==2.5.4" },
     { name = "pandas", specifier = "==3.1.0" },
     { name = "pyarrow", specifier = "==26.0.0" },
     { name = "pyinstaller", marker = "extra == 'dev'", specifier = "==6.22.3" },

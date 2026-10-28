@@ -29,6 +29,7 @@ $RECYCLE.BIN/
 # Private handoff and local data
 /docs/developer-guide.zh-CN.md
 /.local/
+/.claude/
 /.venv/
 /artifacts/
 **/__pycache__/
