@@ -180,6 +180,9 @@ def test_desktop_seed_restores_published_lesson_media_but_preserves_edits(tmp_pa
     installed = Store(target)
     assert installed.all("teachings") == {"t1": lesson}
     assert (target / "media/demo.png").read_bytes() == b"picture"
+    assert (target / "cache/ct_patterns.json").read_bytes() == (
+        source.root / "cache/ct_patterns.json"
+    ).read_bytes()
     assert not (target / "media/private.png").exists()
     installed.save_teaching("t1", {"title": "my notes"})
     install_seed(target, bundle)
