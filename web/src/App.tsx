@@ -148,7 +148,15 @@ export default function App() {
   );
   const summary = pistolSummary(rounds, filters.side);
   const unique = (key: "player" | "team") =>
-    [...new Set(catalog.throws.map((t) => t[key]))].filter(Boolean).sort();
+    [
+      ...new Set(
+        page === "pistol" || page === "pro"
+          ? catalog.rounds.flatMap((r) => r.equipment.map((e) => e[key]))
+          : catalog.throws.map((t) => t[key]),
+      ),
+    ]
+      .filter(Boolean)
+      .sort();
   const maps = [...new Set(catalog.matches.map((m) => m.map))].sort();
   const complete = catalog.throws.filter(
     (t) => t.gaps.length === 0 && t.teaching.status === "published",
@@ -748,7 +756,12 @@ export default function App() {
                           <h3>
                             {t.player} · R{t.round_number} · {t.time}s
                           </h3>
-                          <Timeline client={client} round={r} throwRow={t} />
+                          <Timeline
+                            client={client}
+                            round={r}
+                            throwRow={t}
+                            throws={catalog.throws}
+                          />
                         </div>
                       );
                     })}

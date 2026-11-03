@@ -77,6 +77,7 @@ export type Equipment = {
   armor: number | null;
 };
 export type Round = {
+  observed_throws?: Pick<Throw, "id" | "player_id" | "player" | "kind" | "tick" | "side">[];
   id: string;
   match_id: string;
   number: number;

@@ -11,7 +11,7 @@ from .domain import teaching_gaps
 from .store import Store, now
 
 
-def export_bundle(store: Store, output: Path) -> Path:
+def export_bundle(store: Store, output: Path, *, include_pistols: bool = False) -> Path:
     catalog = store.catalog()
     verified = {m["id"] for m in catalog["matches"] if m["source"]["verified"]}
     throws = [
@@ -21,6 +21,8 @@ def export_bundle(store: Store, output: Path) -> Path:
         and t["teaching"].get("status") == "published"
         and not teaching_gaps(t["teaching"], source_verified=True)
     ]
+    excluded = {r["id"] for r in catalog["rounds"] if r.get("excluded")}
+    throws = [t for t in throws if t["round_id"] not in excluded]
     round_ids = {t["round_id"] for t in throws}
     round_ids.update(
         r["id"]
@@ -30,7 +32,31 @@ def export_bundle(store: Store, output: Path) -> Path:
         and r.get("review", {}).get("pro_video")
         and not r.get("excluded")
     )
-    rounds = [r for r in catalog["rounds"] if r["id"] in round_ids]
+    if include_pistols:
+        round_ids.update(
+            r["id"]
+            for r in catalog["rounds"]
+            if r["match_id"] in verified
+            and r["is_pistol"]
+            and r.get("complete")
+            and not r.get("excluded")
+            and not r.get("review_required")
+        )
+    events: dict[str, list] = {key: [] for key in round_ids}
+    for t in catalog["throws"]:
+        if t["round_id"] in events:
+            events[t["round_id"]].append(
+                {k: t[k] for k in ("id", "tick", "player_id", "player", "kind", "side") if k in t}
+            )
+    rounds = [
+        {
+            **r,
+            "observed_throws": sorted(events[r["id"]], key=lambda t: t["tick"]),
+            "review": r["review"] if r["review"].get("approved") else {},
+        }
+        for r in catalog["rounds"]
+        if r["id"] in round_ids
+    ]
     match_ids = {r["match_id"] for r in rounds}
     matches = [m for m in catalog["matches"] if m["id"] in match_ids]
     throw_ids = {t["id"] for t in throws}

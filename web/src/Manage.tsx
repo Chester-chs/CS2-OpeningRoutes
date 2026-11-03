@@ -101,7 +101,7 @@ export default function Manage({
       const result = await client.write("export", "POST", {});
       setDownload(result.download);
       setExportSummary(
-        `已导出 ${result.manifest.counts.throws} 份完整教学、${result.manifest.counts.rounds} 个回合。仅包含已审核内容。`,
+        `已导出 ${result.manifest.counts.throws} 份完整教学、${result.manifest.counts.rounds} 个回合（含正式手枪局记录）。`,
       );
     } catch (e) {
       setMessage((e as Error).message);
@@ -213,7 +213,7 @@ export default function Manage({
         <div className="export-box">
           <h3>导出到功能网页版</h3>
           <p className="muted">
-            完整教学和已审核回合进入发布包；未完成的草稿继续留在桌面端。
+            内容包含已发布教学、已审核回合，以及来源已核验且回合完整、无待复核异常的手枪局记录。
           </p>
           <button
             className="button secondary"

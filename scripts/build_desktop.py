@@ -5,6 +5,7 @@ import json
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -30,6 +31,23 @@ def make_zip(target: Path | None = None) -> Path:
     return archive
 
 
+def prepare_seed(data: Path, seed: Path):
+    from openingroutes.publish import export_bundle
+    from openingroutes.store import Store
+
+    source = Store(data)
+    matches = list(source.all("matches").values())
+    (seed / "matches.json").write_text(json.dumps(matches, ensure_ascii=False), encoding="utf-8")
+    shutil.copytree(source.root / "timelines", seed / "timelines", dirs_exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        reviewed = export_bundle(source, Path(tmp))
+        content = json.loads((reviewed / "catalog.json").read_text(encoding="utf-8"))
+        lessons = {t["id"]: t["teaching"] for t in content["throws"]}
+        (seed / "teachings.json").write_text(json.dumps(lessons, ensure_ascii=False), encoding="utf-8")
+        if (reviewed / "media").is_dir():
+            shutil.copytree(reviewed / "media", seed / "media")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed-from", type=Path)
@@ -41,12 +59,7 @@ def main():
         shutil.rmtree(seed)
     seed.mkdir(parents=True)
     if args.seed_from:
-        from openingroutes.store import Store
-
-        source = Store(args.seed_from)
-        matches = list(source.all("matches").values())
-        (seed / "matches.json").write_text(json.dumps(matches, ensure_ascii=False), encoding="utf-8")
-        shutil.copytree(source.root / "timelines", seed / "timelines", dirs_exist_ok=True)
+        prepare_seed(args.seed_from, seed)
     command = [
         sys.executable,
         "-m",
@@ -85,7 +98,7 @@ def main():
         "从“数据与内容管理”导入新 Demo，在道具详情中整理教学。\n"
         "手枪局有独立入口，可查看装备、全回合路线和结果。\n"
         "区域、投法变体与异常回合复核在“数据与内容管理”和道具详情中。\n"
-        "本版本不自动录制游戏，不代表已有通过复现核验的完整教程。\n",
+        "首次启动时会载入随包提供的比赛与已发布教学。已有资料库继续使用本机内容。\n",
         encoding="utf-8",
     )
     print(target)

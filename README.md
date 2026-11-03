@@ -8,7 +8,7 @@ OpeningRoutes is a CS2 learning tool in development for players who want to stud
 
 > **Status: v0.2.0 local development preview.** Real demo extraction, area-based utility search, lineup variants with manual merge/split, full-round routes, independent pistol-round study with abnormal-round review, teaching curation and reviewed-content export are implemented. Complete tutorials require match footage, visual instructions and in-game reproduction; extracted records are not presented as verified tutorials. No public release download or hosted service is available yet.
 
-See the [usage guide (Chinese)](docs/usage.zh-CN.md) for running the application, importing demos, curating instruction and preparing web content. The scope below includes implemented foundations and content goals still being developed.
+In the local preview, search for **molodoy** to study his Mirage T-spawn window smoke. The lesson pairs his match POV and aim image with a practice-server reproduction. To study a pistol round, open its full-round timeline and select a throw or opening kill to see where both teams were. [Usage guide (Chinese)](docs/usage.zh-CN.md)
 
 ## Core features and content goals
 

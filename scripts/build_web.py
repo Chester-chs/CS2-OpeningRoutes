@@ -31,7 +31,7 @@ def main():
     shutil.copytree(ROOT / "web/dist", destination)
     content = destination / "content"
     if not args.local_preview:
-        exported = export_bundle(store, store.root / "exports")
+        exported = export_bundle(store, store.root / "exports", include_pistols=True)
         shutil.copytree(exported, content)
     else:
         content.mkdir()

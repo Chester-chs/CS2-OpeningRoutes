@@ -479,7 +479,7 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
     @app.post("/api/export")
     def export():
         try:
-            path = export_bundle(store, root / "exports")
+            path = export_bundle(store, root / "exports", include_pistols=True)
         except ValueError as e:
             raise HTTPException(422, str(e)) from e
         shutil.make_archive(str(path), "zip", path)

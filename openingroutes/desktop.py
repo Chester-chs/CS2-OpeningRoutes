@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import shutil
 import socket
 import sys
 import threading
@@ -11,6 +12,33 @@ import uvicorn
 
 from .api import create_app
 from .store import Store
+
+
+def install_seed(root: Path, seed: Path):
+    if (root / "library.sqlite").exists() or not (seed / "matches.json").is_file():
+        return
+    import tempfile
+
+    root.mkdir(parents=True, exist_ok=True)
+    # Create the database last at its final path so interrupted first runs can retry.
+    with tempfile.TemporaryDirectory(dir=root) as stage:
+        store = Store(Path(stage))
+        for match in json.loads((seed / "matches.json").read_text(encoding="utf-8")):
+            store.save_match(match)
+        lessons = seed / "teachings.json"
+        if lessons.exists():
+            for key, lesson in json.loads(lessons.read_text(encoding="utf-8")).items():
+                store.save_teaching(key, lesson)
+        for folder in ("timelines", "media"):
+            if (seed / folder).is_dir():
+                shutil.copytree(seed / folder, root / folder, dirs_exist_ok=True)
+        with store.connect() as connection:
+            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        connection.close()
+        try:
+            os.link(store.db, root / "library.sqlite")
+        except FileExistsError:
+            pass
 
 
 def main():
@@ -37,14 +65,7 @@ def main():
     if not (web / "index.html").exists():
         raise SystemExit("Web assets are missing. Run npm ci and npm run build in web/ first.")
     seed = bundle / "seed"
-    if not (root / "library.sqlite").exists() and (seed / "matches.json").exists():
-        import shutil
-
-        store = Store(root)
-        for match in json.loads((seed / "matches.json").read_text(encoding="utf-8")):
-            store.save_match(match)
-        if (seed / "timelines").is_dir():
-            shutil.copytree(seed / "timelines", root / "timelines", dirs_exist_ok=True)
+    install_seed(root, seed)
     app = create_app(root, web_root=web)
     if options.browser:
         uvicorn.run(app, host="127.0.0.1", port=options.port, log_level="warning", use_colors=False)

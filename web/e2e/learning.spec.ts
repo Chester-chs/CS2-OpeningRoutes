@@ -4,6 +4,7 @@ test("real catalog supports utility, whole-round context and independent pistol 
   page,
 }) => {
   await page.goto("/");
+  await expect(page.locator('[data-ready="true"]')).toBeVisible({ timeout: 60000 });
   await expect(
     page.getByRole("heading", { name: /从比赛里\s*找到答案。/ }),
   ).toBeVisible();
@@ -28,8 +29,16 @@ test("real catalog supports utility, whole-round context and independent pistol 
   await expect(
     page.locator('[data-testid="round-card"]').first(),
   ).toBeVisible();
-  await page.locator('[data-testid="round-card"]').first().click();
+  await page.getByLabel("比赛", { exact: true }).selectOption("bf4c2f24a8c2a347a82e");
+  await page.getByTestId("round-card").filter({ hasText: "R01" }).click();
   await expect(page.getByText("冻结结束装备")).toBeVisible();
+  await page.getByRole("button", { name: "完整回合", exact: true }).click();
+  const event = page.getByRole("button", { name: /秒 · CT · Magisk/ });
+  await event.click();
+  const seconds = Number((await event.innerText()).split(" 秒")[0]);
+  await expect(page.locator(".time-line")).toContainText(
+    `冻结结束后 ${seconds.toFixed(2)} 秒`,
+  );
 });
 
 test("teaching draft persists but missing evidence prevents publication", async ({

@@ -343,7 +343,12 @@ export default function Detail({
         {tab === "edit" && row ? (
           <TeachingEditor row={row} client={client} onSaved={onSaved} />
         ) : tab === "round" ? (
-          <Timeline client={client} round={round} throwRow={row} />
+          <Timeline
+            client={client}
+            round={round}
+            throwRow={row}
+            throws={catalog.throws}
+          />
         ) : (
           <>
             {row && (
@@ -702,7 +707,9 @@ function RoundFormation({
 }
 
 function RoundFacts({ round, catalog }: { round: Round; catalog: Catalog }) {
-  const throws = catalog.throws.filter((t) => t.round_id === round.id);
+  const throws =
+    round.observed_throws ??
+    catalog.throws.filter((t) => t.round_id === round.id);
   return (
     <section>
       <div className="section-line">
@@ -719,7 +726,7 @@ function RoundFacts({ round, catalog }: { round: Round; catalog: Catalog }) {
               <th>选手 / 阵营</th>
               <th>装备</th>
               <th>护甲</th>
-              <th>投掷</th>
+              <th>收录投掷</th>
             </tr>
           </thead>
           <tbody>

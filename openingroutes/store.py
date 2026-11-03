@@ -3,6 +3,7 @@
 import gzip
 import json
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -50,7 +51,7 @@ class Store:
         for directory in ("uploads", "timelines", "media", "exports", "logs"):
             (self.root / directory).mkdir(exist_ok=True)
         self.db = self.root / "library.sqlite"
-        with self.connect() as c:
+        with closing(self.connect()) as c, c:
             c.executescript("""
                 CREATE TABLE IF NOT EXISTS matches(id TEXT PRIMARY KEY, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS teachings(id TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -72,7 +73,7 @@ class Store:
         if table not in TABLES:
             raise ValueError("Invalid collection")
         encoded = json.dumps(data, ensure_ascii=False, allow_nan=False)
-        with self.connect() as c:
+        with closing(self.connect()) as c, c:
             c.execute(f"INSERT OR REPLACE INTO {table}(id,data) VALUES(?,?)", (key, encoded))
             if table != "jobs":
                 c.execute("INSERT INTO revisions(entity,data,at) VALUES(?,?,?)", (key, encoded, now()))
@@ -80,14 +81,14 @@ class Store:
     def delete(self, table: str, key: str):
         if table not in TABLES:
             raise ValueError("Invalid collection")
-        with self.connect() as c:
+        with closing(self.connect()) as c, c:
             c.execute(f"DELETE FROM {table} WHERE id=?", (key,))
             c.execute("INSERT INTO revisions(entity,data,at) VALUES(?,?,?)", (key, '{"deleted":true}', now()))
 
     def all(self, table):
         if table not in TABLES:
             raise ValueError("Invalid collection")
-        with self.connect() as c:
+        with closing(self.connect()) as c, c:
             return {key: json.loads(data) for key, data in c.execute(f"SELECT id,data FROM {table}")}
 
     def save_match(self, data):
