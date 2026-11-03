@@ -46,6 +46,10 @@ def prepare_seed(data: Path, seed: Path):
         (seed / "teachings.json").write_text(json.dumps(lessons, ensure_ascii=False), encoding="utf-8")
         if (reviewed / "media").is_dir():
             shutil.copytree(reviewed / "media", seed / "media")
+        patterns = source.root / "cache/ct_patterns.json"
+        if patterns.is_file():
+            (seed / "cache").mkdir(exist_ok=True)
+            shutil.copyfile(patterns, seed / "cache/ct_patterns.json")
 
 
 def main():

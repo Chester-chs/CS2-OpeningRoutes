@@ -29,7 +29,7 @@ def install_seed(root: Path, seed: Path):
         if lessons.exists():
             for key, lesson in json.loads(lessons.read_text(encoding="utf-8")).items():
                 store.save_teaching(key, lesson)
-        for folder in ("timelines", "media"):
+        for folder in ("timelines", "media", "cache"):
             if (seed / folder).is_dir():
                 shutil.copytree(seed / folder, root / folder, dirs_exist_ok=True)
         with store.connect() as connection:
