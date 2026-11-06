@@ -12,6 +12,8 @@ ORIGIN_RADIUS = 96.0
 ORIGIN_DZ = 64.0
 EFFECT_RADIUS = 160.0
 ANGLE_DEG = 3.0
+# Bump when the grouping rule changes so cached groups are rebuilt.
+VARIANTS_VERSION = 1
 META = ("title", "purpose", "reviewed", "reviewer")
 
 
@@ -68,7 +70,7 @@ def _order(t):
     return (str(t.get("match_id")), t.get("tick") or 0, str(t.get("id")))
 
 
-def _describe(group_id, source, members, rows, meta):
+def _describe(group_id, source, members, rows):
     first = rows[members[0]]
     return {
         "id": group_id,
@@ -78,14 +80,26 @@ def _describe(group_id, source, members, rows, meta):
         "map": first.get("map"),
         "kind": first.get("kind"),
         "side": first.get("side"),
-        **{k: meta.get(k, False if k == "reviewed" else "") for k in META},
     }
 
 
+def with_meta(groups: list[dict], stored: list[dict]) -> list[dict]:
+    """Curator titles and review flags, applied on read so labelling never regroups."""
+    meta = {v["id"]: v for v in stored}
+    return [
+        {**g, **{k: meta.get(g["id"], {}).get(k, False if k == "reviewed" else "") for k in META}}
+        for g in groups
+    ]
+
+
 def cluster(throws: list[dict], stored: list[dict]) -> list[dict]:
+    return with_meta(group(throws, stored), stored)
+
+
+def group(throws: list[dict], stored: list[dict]) -> list[dict]:
+    """Group membership only; depends on the throws' grouping fields and the manual records."""
     rows = {t["id"]: t for t in throws}
     groups, assigned = [], set()
-    meta = {v["id"]: v for v in stored}
     for record in stored:
         if record.get("source") != "manual":
             continue
@@ -95,7 +109,7 @@ def cluster(throws: list[dict], stored: list[dict]) -> list[dict]:
         )
         if members:
             assigned.update(members)
-            groups.append(_describe(record["id"], "manual", members, rows, record))
+            groups.append(_describe(record["id"], "manual", members, rows))
     auto: list[list[str]] = []
     # Groups are indexed by the grid cell of their first member's release point, so each throw
     # only checks nearby groups; the result is the same as scanning every group in order.
@@ -132,5 +146,5 @@ def cluster(throws: list[dict], stored: list[dict]) -> list[dict]:
             auto[home].append(row["id"])
     for members in auto:
         group_id = "auto-" + hashlib.sha1(members[0].encode()).hexdigest()[:12]
-        groups.append(_describe(group_id, "auto", members, rows, meta.get(group_id, {})))
+        groups.append(_describe(group_id, "auto", members, rows))
     return groups

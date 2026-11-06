@@ -48,7 +48,15 @@ def match(match_id, throws):
         "source": SOURCE,
         "sha256": match_id * 4,
         "rounds": [{"id": f"{match_id}-r1", "match_id": match_id, "number": 1, "is_pistol": True}],
-        "formations": {f"{match_id}-r1": {"ct_team": "A", "t_team": "B", "complete": True, "snapshots": []}},
+        "formations": {
+            f"{match_id}-r1": {
+                "round_id": f"{match_id}-r1",
+                "ct_team": "A",
+                "t_team": "B",
+                "complete": True,
+                "snapshots": [],
+            }
+        },
         "throws": throws,
         "warnings": [],
     }
@@ -60,10 +68,14 @@ def store(tmp_path):
     store.save_match(
         match(
             "alpha1",
-            [throw("alpha1", 1), throw("alpha1", 2, pos=(10, 0, 0), player="Bob"), throw("alpha1", 3, kind="he")],
+            [
+                throw("alpha1", 1),
+                throw("alpha1", 2, pos=(10, 0, 0), player="Bob"),
+                throw("alpha1", 3, kind="he"),
+            ],
         )
     )
-    store.save_match(match("alpha2", [throw("alpha2", 1, pos=(20, 0, 0), player="Carol")]))
+    store.save_match(match("alpha2", [throw("alpha2", 1, pos=(20, 0, 0), yaw=60.0, player="Carol")]))
     store.save_match(match("beta1", [throw("beta1", 1), throw("beta1", 2, pos=(900, 0, 0))]))
     return store
 
@@ -138,6 +150,7 @@ def test_throw_lookup_works_for_ids_without_a_match_prefix(tmp_path):
 
 
 def test_variant_groups_are_cached_until_grouping_inputs_change(store, monkeypatch):
+    store.catalog()  # CT analysis cached, as after an import
     calls = []
     real = variants.group
     monkeypatch.setattr(variants, "group", lambda *a: calls.append(1) or real(*a))
@@ -147,7 +160,9 @@ def test_variant_groups_are_cached_until_grouping_inputs_change(store, monkeypat
     # a label is applied on read and does not regroup
     auto = next(v for v in first if len(v["members"]) > 1)
     store.put("variants", auto["id"], {"id": auto["id"], "source": "auto", "title": "窗口烟"})
-    assert next(v for v in store.map_slice("de_alpha")["variants"] if v["id"] == auto["id"])["title"] == "窗口烟"
+    assert (
+        next(v for v in store.map_slice("de_alpha")["variants"] if v["id"] == auto["id"])["title"] == "窗口烟"
+    )
     assert len(calls) == 1
     # a manual split regroups
     store.put("variants", "v-manual", {"id": "v-manual", "source": "manual", "members": [auto["members"][0]]})
@@ -162,7 +177,10 @@ def test_variant_groups_are_cached_until_grouping_inputs_change(store, monkeypat
 def test_studio_endpoints_validate_and_serve(store):
     c = TestClient(create_app(store.root, testing=True))
     summary = c.get("/api/catalog/summary")
-    assert summary.status_code == 200 and [m["map"] for m in summary.json()["maps"]] == ["de_alpha", "de_beta"]
+    assert summary.status_code == 200 and [m["map"] for m in summary.json()["maps"]] == [
+        "de_alpha",
+        "de_beta",
+    ]
     assert c.get("/api/catalog/maps/de_beta").json()["map"] == "de_beta"
     assert c.get("/api/catalog/maps/de_missing").status_code == 404
     assert c.get("/api/catalog/maps/..%2Fx").status_code in (404, 422)
@@ -183,7 +201,9 @@ def test_writes_do_not_rebuild_the_full_catalog(store, monkeypatch):
     monkeypatch.setattr(Store, "catalog", lambda self: pytest.fail("full catalog rebuilt"))
     draft = c.put("/api/teachings/alpha1-t64-Alice", headers=h, json={"title": "Draft", "status": "draft"})
     assert draft.status_code == 200
-    published = c.put("/api/teachings/alpha1-t64-Alice", headers=h, json={"title": "X", "status": "published"})
+    published = c.put(
+        "/api/teachings/alpha1-t64-Alice", headers=h, json={"title": "X", "status": "published"}
+    )
     assert published.status_code == 422 and "pro_video" in published.json()["detail"]["gaps"]
     assert c.put("/api/teachings/nope", headers=h, json={"title": "X"}).status_code == 404
     plan = {
