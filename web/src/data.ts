@@ -1,6 +1,7 @@
 import type {
   Catalog,
   Filters,
+  MapSlice,
   Mode,
   Round,
   Teaching,
@@ -153,6 +154,52 @@ export function variantPeers(
   return { variant, others };
 }
 
+/** Replace one map's throws, rounds, variants and CT analysis; other maps stay as they are. */
+export function mergeSlice(c: Catalog, s: MapSlice): Catalog {
+  const order = new Map(c.matches.map((m, i) => [m.id, i]));
+  const rounds = new Map(s.rounds.map((r) => [r.id, r]));
+  const ct = { ...(c.ct_patterns || {}) };
+  delete ct[s.map];
+  return {
+    ...c,
+    throws: [...c.throws.filter((t) => t.map !== s.map), ...s.throws].sort(
+      (a, b) => (order.get(a.match_id) ?? 0) - (order.get(b.match_id) ?? 0),
+    ),
+    rounds: c.rounds.map((r) => rounds.get(r.id) || r),
+    // Ordered by map, so the result does not depend on which map loaded first.
+    variants: [
+      ...(c.variants || []).filter((v) => v.map !== s.map),
+      ...s.variants,
+    ].sort((a, b) => (a.map < b.map ? -1 : a.map > b.map ? 1 : 0)),
+    ct_patterns: { ...ct, ...s.ct_patterns },
+    loaded: [...new Set([...(c.loaded || []), s.map])],
+  };
+}
+
+/** A loaded map taken back out of the catalog, to keep it across a summary refresh. */
+export function sliceOf(c: Catalog, map: string): MapSlice {
+  const ids = new Set(c.matches.filter((m) => m.map === map).map((m) => m.id));
+  const ct = c.ct_patterns?.[map];
+  return {
+    map,
+    throws: c.throws.filter((t) => t.map === map),
+    rounds: c.rounds.filter((r) => ids.has(r.match_id)),
+    variants: (c.variants || []).filter((v) => v.map === map),
+    ct_patterns: ct ? { [map]: ct } : {},
+  };
+}
+
+export function mapOfThrow(c: Catalog, id: string) {
+  const matchId = id.split("-t")[0];
+  return c.matches.find((m) => m.id === matchId)?.map;
+}
+
+export function trajectoryPoints(
+  t: Pick<Throw, "trajectory" | "trajectory_preview">,
+) {
+  return t.trajectory || t.trajectory_preview || [];
+}
+
 export function pistolSummary(rounds: Round[], side?: string) {
   const complete = rounds.filter((r) => r.complete && r.winner);
   const wins = side ? complete.filter((r) => r.winner === side).length : null;
@@ -201,7 +248,7 @@ export class DataClient {
         const session = await response.json();
         this.mode = "desktop";
         this.token = session.token;
-        return this.catalog();
+        return this.summary();
       }
     }
     this.mode = "web";
@@ -229,6 +276,29 @@ export class DataClient {
     const data = JSON.parse(new TextDecoder().decode(bytes));
     if (data.schema_version !== 1) throw new Error("内容格式不兼容。");
     return data;
+  }
+  /** Desktop studio: everything but throws, variants and formations. */
+  async summary(): Promise<Catalog> {
+    const response = await fetch("/api/catalog/summary");
+    if (!response.ok)
+      throw new Error("读取学习资料失败，请检查本地服务或内容包。");
+    const data = await response.json();
+    if (data.schema_version !== 1) throw new Error("内容格式不兼容。");
+    return data;
+  }
+  async loadMap(map: string): Promise<MapSlice> {
+    const response = await fetch(
+      `/api/catalog/maps/${encodeURIComponent(map)}`,
+    );
+    if (!response.ok) throw new Error(`读取地图 ${map} 的资料失败。`);
+    return response.json();
+  }
+  /** The full row with its trajectory; the static site already has it. */
+  async throwDetail(id: string): Promise<Throw | null> {
+    if (this.mode !== "desktop") return null;
+    const response = await fetch(`/api/throws/${encodeURIComponent(id)}`);
+    if (!response.ok) throw new Error("读取投掷详情失败。");
+    return response.json();
   }
   async timeline(id: string): Promise<Timeline> {
     const path =

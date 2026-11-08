@@ -2191,3 +2191,19 @@ button.chip {
     gap: 4px;
   }
 }
+
+/* 资料整理工作室：按地图载入 */
+.map-loader {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  flex-wrap: wrap;
+  margin: 0 0 19px;
+}
+.map-loader .chips {
+  margin-top: 0;
+}
+.map-loader .chip:disabled {
+  cursor: default;
+  opacity: 1;
+}

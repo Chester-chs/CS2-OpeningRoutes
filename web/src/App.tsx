@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -22,6 +22,10 @@ import {
   EMPTY,
   filterThrows,
   kindNames,
+  mapOfThrow,
+  mergeSlice,
+  sliceOf,
+  trajectoryPoints,
   pistolSummary,
   visibleRounds,
 } from "./data";
@@ -79,12 +83,54 @@ export default function App() {
   const [compare, setCompare] = useState<string[]>([]);
   const [showCompare, setShowCompare] = useState(false);
   const [storageMessage, setStorageMessage] = useState("");
+  // Desktop studio: the summary opens the app, each map's throws load on demand.
+  const latest = useRef(catalog);
+  useEffect(() => {
+    latest.current = catalog;
+  }, [catalog]);
+  const inflight = useRef(new Set<string>());
+  const [mapLoading, setMapLoading] = useState<string[]>([]);
+  const ensureMap = useCallback(
+    (map?: string, force = false) => {
+      if (!map || client.mode !== "desktop" || inflight.current.has(map))
+        return;
+      if (!force && (latest.current.loaded || []).includes(map)) return;
+      inflight.current.add(map);
+      setMapLoading([...inflight.current]);
+      client
+        .loadMap(map)
+        .then((slice) => setCatalog((c) => mergeSlice(c, slice)))
+        .catch((e) => setError(e.message))
+        .finally(() => {
+          inflight.current.delete(map);
+          setMapLoading([...inflight.current]);
+        });
+    },
+    [client],
+  );
   const refresh = useCallback(() => {
+    if (client.mode !== "desktop") {
+      void client
+        .catalog()
+        .then(setCatalog)
+        .catch((e) => setError(e.message));
+      return;
+    }
+    const loaded = latest.current.loaded || [];
     void client
-      .catalog()
-      .then(setCatalog)
+      .summary()
+      .then((next) => {
+        // Keep what is on screen until each loaded map has been fetched again.
+        setCatalog(
+          loaded.reduce(
+            (c, map) => mergeSlice(c, sliceOf(latest.current, map)),
+            next,
+          ),
+        );
+        loaded.forEach((map) => ensureMap(map, true));
+      })
       .catch((e) => setError(e.message));
-  }, [client]);
+  }, [client, ensureMap]);
   useEffect(() => {
     let active = true;
     client
@@ -93,6 +139,11 @@ export default function App() {
         if (active) {
           setCatalog(c);
           setError("");
+          // Start with the map that has the most throws so the library is not empty.
+          const first = [...(c.maps || [])].sort(
+            (a, b) => b.throws - a.throws,
+          )[0];
+          if (first) ensureMap(first.map);
         }
       })
       .catch((e) => {
@@ -104,7 +155,26 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [client]);
+  }, [client, ensureMap]);
+  useEffect(() => ensureMap(filters.map), [filters.map, ensureMap]);
+  useEffect(() => {
+    // Saved throws, plan steps and an opened detail may sit on maps not loaded yet.
+    const ids =
+      page === "saved"
+        ? [...favorites]
+        : page === "plans"
+          ? catalog.plans.flatMap((p) => p.steps.map((s) => s.throw_id))
+          : [];
+    if (detail) ids.push(detail.id);
+    for (const id of ids) {
+      const map =
+        mapOfThrow(catalog, id) ||
+        catalog.matches.find(
+          (m) => m.id === catalog.rounds.find((r) => r.id === id)?.match_id,
+        )?.map;
+      ensureMap(map);
+    }
+  }, [page, favorites, detail, catalog, ensureMap]);
   function toggleFavorite(id: string) {
     setFavorites((previous) => {
       const next = previous.includes(id)
@@ -158,9 +228,27 @@ export default function App() {
       .filter(Boolean)
       .sort();
   const maps = [...new Set(catalog.matches.map((m) => m.map))].sort();
-  const complete = catalog.throws.filter(
-    (t) => t.gaps.length === 0 && t.teaching.status === "published",
-  ).length;
+  const complete = catalog.maps
+    ? catalog.maps.reduce((n, m) => n + m.complete, 0)
+    : catalog.throws.filter(
+        (t) => t.gaps.length === 0 && t.teaching.status === "published",
+      ).length;
+  const totalThrows = catalog.maps
+    ? catalog.maps.reduce((n, m) => n + m.throws, 0)
+    : catalog.throws.length;
+  const detailReady =
+    !detail ||
+    (detail.kind === "throw"
+      ? catalog.throws.some((t) => t.id === detail.id)
+      : catalog.rounds.some((r) => r.id === detail.id) &&
+        (client.mode !== "desktop" ||
+          (catalog.loaded || []).includes(
+            catalog.matches.find(
+              (m) =>
+                m.id ===
+                catalog.rounds.find((r) => r.id === detail.id)?.match_id,
+            )?.map || "",
+          )));
   const verifiedMatches = catalog.matches.filter((m) => m.source.verified);
   const isRounds = page === "pistol" || page === "pro";
   const gear = new Map<string, number>();
@@ -406,6 +494,19 @@ export default function App() {
               正在读取学习资料…
             </p>
           )}
+          {client.mode === "desktop" && catalog.maps && page !== "manage" && (
+            <MapLoader
+              maps={catalog.maps}
+              loaded={catalog.loaded || []}
+              loading={mapLoading}
+              load={(m) => ensureMap(m)}
+            />
+          )}
+          {detail && !detailReady && (
+            <p role="status" className="notice">
+              正在载入这条记录所在地图的资料…
+            </p>
+          )}
           {error && (
             <div role="alert" className="notice">
               {error}
@@ -427,7 +528,7 @@ export default function App() {
                 />
                 <Stat
                   label="真实投掷记录"
-                  value={catalog.throws.length}
+                  value={totalThrows}
                   detail="保留选手、回合与出手依据"
                 />
                 <Stat
@@ -508,6 +609,8 @@ export default function App() {
               client={client}
               catalog={catalog}
               onRefresh={refresh}
+              onSelectMap={(m) => ensureMap(m)}
+              loadingMaps={mapLoading}
               openRound={(id) => setDetail({ id, kind: "round" })}
             />
           ) : page === "plans" ? (
@@ -888,7 +991,7 @@ export default function App() {
           </footer>
         </main>
       </div>
-      {detail && (
+      {detail && detailReady && (
         <Detail
           key={detail.id}
           {...detail}
@@ -902,6 +1005,53 @@ export default function App() {
         />
       )}
     </div>
+  );
+}
+
+function MapLoader({
+  maps,
+  loaded,
+  loading,
+  load,
+}: {
+  maps: { map: string; throws: number; matches: number }[];
+  loaded: string[];
+  loading: string[];
+  load: (map: string) => void;
+}) {
+  const done = maps.filter((m) => loaded.includes(m.map)).length;
+  return (
+    <section className="map-loader" aria-label="按地图载入资料">
+      <span className="micro">
+        资料按地图载入 · 已载入 {done}/{maps.length} 张地图
+      </span>
+      <div className="chips">
+        {maps.map((m) => {
+          const isLoaded = loaded.includes(m.map);
+          const busy = loading.includes(m.map);
+          return (
+            <button
+              key={m.map}
+              className={isLoaded ? "chip active" : "chip"}
+              disabled={isLoaded || busy}
+              onClick={() => load(m.map)}
+              aria-label={`${m.map.replace("de_", "")}：${
+                isLoaded ? "已载入" : busy ? "载入中" : "点击载入"
+              }`}
+            >
+              {m.map.replace("de_", "")}{" "}
+              <b>
+                {busy
+                  ? "载入中…"
+                  : isLoaded
+                    ? m.throws.toLocaleString()
+                    : `载入 ${m.throws.toLocaleString()}`}
+              </b>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -996,7 +1146,7 @@ function CompareVariants({
   );
 }
 function ThrowCard({ row: t, onOpen }: { row: Throw; onOpen: () => void }) {
-  const points = t.trajectory || [];
+  const points = trajectoryPoints(t);
   const xs = points.map((p) => p[1]),
     ys = points.map((p) => p[2]);
   const minX = Math.min(...xs),

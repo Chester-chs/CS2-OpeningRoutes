@@ -17,6 +17,25 @@ export default function Timeline({
   const [error, setError] = useState("");
   const [seconds, setSeconds] = useState(throwRow?.time || 0);
   const [selected, setSelected] = useState<string[]>([]);
+  const [path, setPath] = useState<number[][] | null>(null);
+  const throwId = throwRow?.id;
+  const hasPath = Boolean(throwRow?.trajectory);
+  useEffect(() => {
+    // Desktop slices only carry a preview; fetch this throw's full flight path.
+    let active = true;
+    setPath(null);
+    if (throwId && !hasPath)
+      client
+        .throwDetail(throwId)
+        .then((row) => {
+          if (active && row?.trajectory) setPath(row.trajectory);
+        })
+        .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [client, throwId, hasPath]);
+  const flight = throwRow?.trajectory || path || [];
   useEffect(() => {
     let active = true;
     setData(null);
@@ -146,11 +165,9 @@ export default function Timeline({
               </g>
             );
           })}
-        {throwRow?.trajectory.length ? (
+        {flight.length ? (
           <polyline
-            points={throwRow.trajectory
-              .map((v) => `${x(v[1])},${y(v[2])}`)
-              .join(" ")}
+            points={flight.map((v) => `${x(v[1])},${y(v[2])}`).join(" ")}
             fill="none"
             stroke="#fff"
             strokeDasharray="4 3"

@@ -4,7 +4,9 @@ test("real catalog supports utility, whole-round context and independent pistol 
   page,
 }) => {
   await page.goto("/");
-  await expect(page.locator('[data-ready="true"]')).toBeVisible({ timeout: 60000 });
+  await expect(page.locator('[data-ready="true"]')).toBeVisible({
+    timeout: 60000,
+  });
   await expect(
     page.getByRole("heading", { name: /从比赛里\s*找到答案。/ }),
   ).toBeVisible();
@@ -29,7 +31,9 @@ test("real catalog supports utility, whole-round context and independent pistol 
   await expect(
     page.locator('[data-testid="round-card"]').first(),
   ).toBeVisible();
-  await page.getByLabel("比赛", { exact: true }).selectOption("bf4c2f24a8c2a347a82e");
+  await page
+    .getByLabel("比赛", { exact: true })
+    .selectOption("bf4c2f24a8c2a347a82e");
   await page.getByTestId("round-card").filter({ hasText: "R01" }).click();
   await expect(page.getByText("冻结结束装备")).toBeVisible();
   await page.getByRole("button", { name: "完整回合", exact: true }).click();
@@ -107,4 +111,27 @@ test("CT defence research shows patterns, method and round formation", async ({
   await page.getByRole("tab", { name: "防守阵型" }).click();
   await page.getByRole("button", { name: "代表回合" }).first().click();
   await expect(page.getByText(/CT 开局站位/)).toBeVisible();
+});
+
+test("desktop studio opens from the summary and loads maps on demand", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const loader = page.getByRole("region", { name: "按地图载入资料" });
+  await expect(loader.getByText("已载入 1/2 张地图")).toBeVisible();
+  await page.getByRole("button", { name: "道具库", exact: true }).click();
+  const count = async () =>
+    Number(await page.locator(".results strong").first().textContent());
+  const before = await count();
+  expect(before).toBeGreaterThan(0);
+  await loader.getByRole("button", { name: /点击载入/ }).click();
+  await expect(loader.getByText("已载入 2/2 张地图")).toBeVisible();
+  await expect.poll(count).toBeGreaterThan(before);
+  await page.getByRole("button", { name: "CT 防守研究", exact: true }).click();
+  const tabs = page.getByRole("tablist", { name: "选择地图" }).getByRole("tab");
+  await expect(tabs).toHaveCount(2);
+  for (const tab of await tabs.all()) {
+    await tab.click();
+    await expect(page.locator(".pattern-card").first()).toBeVisible();
+  }
 });
