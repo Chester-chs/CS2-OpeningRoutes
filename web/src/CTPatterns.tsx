@@ -398,12 +398,15 @@ function PatternCard({
         常用战队：{teams.map(([t, v]) => `${t} ${v}`).join(" · ")}
       </p>
       <div className="card-actions">
-        <button
-          className="text-button"
-          onClick={() => openRound(p.representative)}
-        >
-          <Eye size={14} /> 代表回合
-        </button>
+        {p.representative &&
+          catalog.rounds.some((r) => r.id === p.representative) && (
+            <button
+              className="text-button"
+              onClick={() => openRound(p.representative)}
+            >
+              <Eye size={14} /> 代表回合
+            </button>
+          )}
         {canEdit && (
           <button className="text-button" onClick={onDraft}>
             <ClipboardPlus size={14} /> 生成方案草稿

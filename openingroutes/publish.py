@@ -98,7 +98,25 @@ def export_bundle(store: Store, output: Path, *, include_pistols: bool = False) 
             for v in catalog.get("variants", [])
             if any(m in throw_ids for m in v["members"])
         ]
-        used_maps = {m["map"] for m in matches}
+        # CT research is aggregated from source-verified matches only (Store.ct_patterns). The
+        # per-round lists stay in the studio; a representative round is linked only if exported.
+        exported_rounds = {r["id"] for r in rounds}
+        ct_patterns = {
+            map_name: {
+                **{k: v for k, v in analysis.items() if k != "assignments"},
+                "patterns": [
+                    {
+                        **{k: v for k, v in pattern.items() if k != "round_ids"},
+                        "representative": pattern.get("representative")
+                        if pattern.get("representative") in exported_rounds
+                        else "",
+                    }
+                    for pattern in analysis.get("patterns", [])
+                ],
+            }
+            for map_name, analysis in (catalog.get("ct_patterns") or {}).items()
+        }
+        used_maps = {m["map"] for m in matches} | set(ct_patterns)
         places = {k: v for k, v in catalog.get("places", {}).items() if k in used_maps}
         bundle = {
             "schema_version": 1,
@@ -108,6 +126,7 @@ def export_bundle(store: Store, output: Path, *, include_pistols: bool = False) 
             "plans": plans,
             "variants": variants,
             "places": places,
+            "ct_patterns": ct_patterns,
         }
         (staging / "catalog.json").write_text(json.dumps(bundle, ensure_ascii=False), encoding="utf-8")
         checksums = {
