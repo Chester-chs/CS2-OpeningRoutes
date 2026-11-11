@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { BookOpen, ClipboardPlus, Eye } from "lucide-react";
-import { DataClient, kindNames } from "./data";
+import { DataClient, isMisthrow, kindNames } from "./data";
 import type {
   AreaShares,
   Catalog,
@@ -98,7 +98,8 @@ export function draftPlan(
       (t) =>
         t.round_id === pattern.representative &&
         t.side === "CT" &&
-        t.time <= 20,
+        t.time <= 20 &&
+        !isMisthrow(t),
     )
     .sort((a, b) => a.time - b.time)
     .map((t) => ({

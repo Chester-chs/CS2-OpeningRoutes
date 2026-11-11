@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { DataClient, kindNames } from "./data";
+import { DataClient, isMisthrow, kindNames } from "./data";
 import type { Round, Throw, Timeline as TimelineData } from "./types";
 
 export default function Timeline({
@@ -84,7 +84,7 @@ export default function Timeline({
   const markers = [
     ...events.map((t) => ({
       tick: t.tick,
-      label: `${t.side} · ${t.player} · ${kindNames[t.kind] ?? t.kind}`,
+      label: `${t.side} · ${t.player} · ${kindNames[t.kind] ?? t.kind}${isMisthrow(t) ? " · 失误" : ""}`,
     })),
     ...(round.opening_kill
       ? [

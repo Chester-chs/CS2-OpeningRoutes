@@ -728,10 +728,14 @@ export default function App() {
                         <Select
                           label="教学状态"
                           value={filters.status}
-                          options={["complete", "pending"].map((s) => [
-                            s,
-                            s === "complete" ? "资料齐全" : "教学待完善",
-                          ])}
+                          options={[
+                            ["complete", "资料齐全"],
+                            ["pending", "教学待完善"],
+                            // Only the studio keeps misthrows; exports leave them out.
+                            ...(client.mode === "desktop"
+                              ? [["misthrow", "已标为失误"]]
+                              : []),
+                          ]}
                           change={(v) => update("status", v)}
                         />
                       )

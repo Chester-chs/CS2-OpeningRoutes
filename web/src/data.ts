@@ -2,6 +2,7 @@ import type {
   Catalog,
   Filters,
   MapSlice,
+  Misthrow,
   Mode,
   Round,
   Teaching,
@@ -48,7 +49,28 @@ export const teachingLabels: Record<string, string> = {
   verified_on: "核验日期",
   map_version: "验证的游戏 / 地图版本",
   reproduction: "游戏内复现",
+  misthrow: "先恢复失误标记",
 };
+
+/** Full rows carry the state; exported round events only a marker. */
+export function isMisthrow(t: { misthrow?: Misthrow | boolean }) {
+  return typeof t.misthrow === "object"
+    ? t.misthrow.flagged
+    : Boolean(t.misthrow);
+}
+
+export function misthrowReason(m: Misthrow) {
+  const auto = !m.auto
+    ? ""
+    : m.auto.rule === "bounce_back"
+      ? `落点离出手点只有 ${m.auto.distance} 单位（撞墙弹回或掉在脚下）`
+      : `与同一出手点、同一瞄点的成熟投法相比，落点偏离 ${m.auto.distance} 单位`;
+  if (m.source === "auto") return `自动判定：${auto}`;
+  const decided = m.flagged ? "人工标为失误" : "人工确认不是失误";
+  return [decided, m.note, auto && `自动规则：${auto}`]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 function matchIds(c: Catalog, f: Filters) {
   return new Set(
@@ -78,8 +100,14 @@ export function filterThrows(c: Catalog, f: Filters) {
         t.origin_area === f.area ||
         t.effect_area === f.area ||
         t.teaching.area === f.area) &&
-      (!f.status ||
-        (f.status === "complete" ? t.gaps.length === 0 : t.gaps.length > 0)) &&
+      // Misthrows only show when asked for; the other statuses never include them.
+      (f.status === "misthrow"
+        ? isMisthrow(t)
+        : !isMisthrow(t) &&
+          (!f.status ||
+            (f.status === "complete"
+              ? t.gaps.length === 0
+              : t.gaps.length > 0))) &&
       (!q ||
         [
           t.player,
@@ -137,7 +165,7 @@ export function visibleRounds(c: Catalog, f: Filters, pistolOnly: boolean) {
 export function areaOptions(c: Catalog, map?: string) {
   const names = new Set<string>();
   for (const t of c.throws)
-    if (!map || t.map === map)
+    if ((!map || t.map === map) && !isMisthrow(t))
       for (const value of [t.origin_area, t.effect_area, t.teaching.area])
         if (typeof value === "string" && value) names.add(value);
   return [...names].sort();

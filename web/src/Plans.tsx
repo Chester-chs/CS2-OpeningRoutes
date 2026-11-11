@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { DataClient, kindNames } from "./data";
+import { DataClient, isMisthrow, kindNames } from "./data";
 import type { Catalog, Plan } from "./types";
 
 export default function Plans({
@@ -169,12 +169,14 @@ export default function Plans({
                   }
                 >
                   <option value="">选择比赛中的投掷</option>
-                  {catalog.throws.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.map} R{t.round_number} {t.player} {kindNames[t.kind]}{" "}
-                      {t.time}s
-                    </option>
-                  ))}
+                  {catalog.throws
+                    .filter((t) => !isMisthrow(t) || t.id === step.throw_id)
+                    .map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.map} R{t.round_number} {t.player} {kindNames[t.kind]}{" "}
+                        {t.time}s
+                      </option>
+                    ))}
                 </select>
               </label>
               <label>

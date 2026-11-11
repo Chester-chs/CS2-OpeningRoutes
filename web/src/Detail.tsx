@@ -5,6 +5,7 @@ import {
   DataClient,
   kindNames,
   mediaUrl,
+  misthrowReason,
   teachingLabels,
   variantPeers,
 } from "./data";
@@ -358,6 +359,7 @@ export default function Detail({
                     ? `提取记录 · 教学待完善（尚缺 ${row.gaps.length} 项）`
                     : "完整教学 · 已记录游戏内复现核验"}
                 </div>
+                <MisthrowPanel row={row} client={client} onSaved={onSaved} />
                 <section className="facts">
                   <h3>出手坐标与视角</h3>
                   <div className="fact-grid">
@@ -761,6 +763,81 @@ function RoundFacts({ round, catalog }: { round: Round; catalog: Catalog }) {
         {round.review_required ? " · 异常回合需要复核" : ""}
       </p>
       {round.review.description && <p>{round.review.description}</p>}
+    </section>
+  );
+}
+
+function MisthrowPanel({
+  row,
+  client,
+  onSaved,
+}: {
+  row: Throw;
+  client: DataClient;
+  onSaved: () => void;
+}) {
+  const state = row.misthrow;
+  const [note, setNote] = useState("");
+  const [message, setMessage] = useState("");
+  if (!state && client.mode !== "desktop") return null;
+  const send = (method: string, decision?: "misthrow" | "keep") =>
+    client
+      .write(
+        `throws/${row.id}/misthrow`,
+        method,
+        decision ? { decision, note, reviewer: "" } : {},
+      )
+      .then(() => {
+        setMessage("");
+        onSaved();
+      })
+      .catch((e) => setMessage((e as Error).message));
+  return (
+    <section className="misthrow">
+      {state && (
+        <div className="notice" data-testid="misthrow-state">
+          {state.flagged
+            ? "已标为失误：不进入道具库、投法归组、教学和导出，只保留在完整回合里。"
+            : state.conflict
+              ? "自动规则认为这次投掷可能是失误；因为已有发布的教学，仍然保留。"
+              : "这次投掷保留在道具库。"}{" "}
+          {misthrowReason(state)}
+        </div>
+      )}
+      {client.mode === "desktop" && (
+        <div className="actions">
+          {state?.flagged ? (
+            <button
+              className="button secondary"
+              onClick={() => void send("PUT", "keep")}
+            >
+              不是失误，恢复
+            </button>
+          ) : (
+            <>
+              <input
+                aria-label="失误备注"
+                placeholder="失误原因（可选）"
+                maxLength={2000}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+              />
+              <button
+                className="button secondary"
+                onClick={() => void send("PUT", "misthrow")}
+              >
+                标为失误
+              </button>
+            </>
+          )}
+          {state?.source === "manual" && (
+            <button className="text-button" onClick={() => void send("DELETE")}>
+              撤销人工判断
+            </button>
+          )}
+        </div>
+      )}
+      {message && <p role="alert">{message}</p>}
     </section>
   );
 }
