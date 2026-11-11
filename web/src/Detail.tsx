@@ -359,7 +359,12 @@ export default function Detail({
                     ? `提取记录 · 教学待完善（尚缺 ${row.gaps.length} 项）`
                     : "完整教学 · 已记录游戏内复现核验"}
                 </div>
-                <MisthrowPanel row={row} client={client} onSaved={onSaved} />
+                <MisthrowPanel
+                  key={row.id}
+                  row={row}
+                  client={client}
+                  onSaved={onSaved}
+                />
                 <section className="facts">
                   <h3>出手坐标与视角</h3>
                   <div className="fact-grid">
@@ -779,23 +784,28 @@ function MisthrowPanel({
   const state = row.misthrow;
   const [note, setNote] = useState("");
   const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
   if (!state && client.mode !== "desktop") return null;
-  const send = (method: string, decision?: "misthrow" | "keep") =>
-    client
+  const send = (method: "PUT" | "DELETE", decision?: "misthrow" | "keep") => {
+    setBusy(true);
+    return client
       .write(
         `throws/${row.id}/misthrow`,
         method,
-        decision ? { decision, note, reviewer: "" } : {},
+        decision ? { decision, note } : {},
       )
       .then(() => {
         setMessage("");
+        setNote("");
         onSaved();
       })
-      .catch((e) => setMessage((e as Error).message));
+      .catch((e) => setMessage((e as Error).message))
+      .finally(() => setBusy(false));
+  };
   return (
     <section className="misthrow">
       {state && (
-        <div className="notice" data-testid="misthrow-state">
+        <div className="notice" role="status" data-testid="misthrow-state">
           {state.flagged
             ? "已标为失误：不进入道具库、投法归组、教学和导出，只保留在完整回合里。"
             : state.conflict
@@ -809,6 +819,7 @@ function MisthrowPanel({
           {state?.flagged ? (
             <button
               className="button secondary"
+              disabled={busy}
               onClick={() => void send("PUT", "keep")}
             >
               不是失误，恢复
@@ -824,6 +835,7 @@ function MisthrowPanel({
               />
               <button
                 className="button secondary"
+                disabled={busy}
                 onClick={() => void send("PUT", "misthrow")}
               >
                 标为失误
@@ -831,7 +843,11 @@ function MisthrowPanel({
             </>
           )}
           {state?.source === "manual" && (
-            <button className="text-button" onClick={() => void send("DELETE")}>
+            <button
+              className="text-button"
+              disabled={busy}
+              onClick={() => void send("DELETE")}
+            >
               撤销人工判断
             </button>
           )}

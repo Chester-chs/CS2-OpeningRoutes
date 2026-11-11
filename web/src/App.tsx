@@ -21,6 +21,7 @@ import {
   DataClient,
   EMPTY,
   filterThrows,
+  isMisthrow,
   kindNames,
   mapOfThrow,
   mergeSlice,
@@ -222,7 +223,9 @@ export default function App() {
       ...new Set(
         page === "pistol" || page === "pro"
           ? catalog.rounds.flatMap((r) => r.equipment.map((e) => e[key]))
-          : catalog.throws.map((t) => t[key]),
+          : catalog.throws
+              .filter((t) => isMisthrow(t) === (filters.status === "misthrow"))
+              .map((t) => t[key]),
       ),
     ]
       .filter(Boolean)

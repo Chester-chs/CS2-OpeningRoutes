@@ -65,7 +65,7 @@ export function misthrowReason(m: Misthrow) {
     : m.auto.rule === "bounce_back"
       ? `落点离出手点只有 ${m.auto.distance} 单位（撞墙弹回或掉在脚下）`
       : `与同一出手点、同一瞄点的成熟投法相比，落点偏离 ${m.auto.distance} 单位`;
-  if (m.source === "auto") return `自动判定：${auto}`;
+  if (m.source === "auto") return auto ? `自动判定：${auto}` : "自动判定";
   const decided = m.flagged ? "人工标为失误" : "人工确认不是失误";
   return [decided, m.note, auto && `自动规则：${auto}`]
     .filter(Boolean)

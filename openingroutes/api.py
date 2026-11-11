@@ -21,7 +21,7 @@ from .domain import safe_url, teaching_gaps
 from .models import Source, Teaching
 from .places import valid_place
 from .publish import export_bundle
-from .store import Store, now
+from .store import Store, now, published_throws
 
 ID = r"^[A-Za-z0-9_-]{1,150}$"
 MAP = r"^[a-z0-9_]{1,40}$"
@@ -203,17 +203,28 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
     def decide_misthrow(throw_id: str, body: MisthrowDecision):
         if not re.fullmatch(ID, throw_id):
             raise HTTPException(422, "Invalid throw")
-        if store.locate(throw_id)[0] is None:
+        raw, match = store.locate(throw_id)
+        if raw is None:
             raise HTTPException(404, "Throw not found")
         if body.decision == "misthrow":
             # Hiding the throw would silently drop its lesson, or a plan built on it, from exports.
-            published = store.all("teachings").get(throw_id, {}).get("status") == "published" or any(
-                plan.get("status") == "published"
-                and any(step["throw_id"] == throw_id for step in plan.get("steps", []))
-                for plan in store.all("plans").values()
-            )
-            if published:
+            if throw_id in published_throws(store.all("teachings"), store.all("plans").values()):
                 raise HTTPException(409, "Withdraw the published lesson or plan that uses this throw first")
+            # An automatic lineup is named after its earliest throw. Hiding that throw would
+            # rename the group and lose a curator's label, so the rest is pinned first.
+            variants = store.map_slice(match["map"])["variants"]
+            variant = next((v for v in variants if v["members"][0] == throw_id), None)
+            if (
+                variant
+                and variant["source"] == "auto"
+                and len(variant["members"]) > 1
+                and (variant["title"] or variant["purpose"] or variant["reviewed"])
+            ):
+                pinned = "v-" + uuid4().hex[:12]
+                record = {"id": pinned, "source": "manual", "members": variant["members"][1:]}
+                store.put("variants", pinned, {**record, **stored_meta(variant)})
+                if variant["id"] in store.all("variants"):
+                    store.delete("variants", variant["id"])
         store.put("misthrows", throw_id, {**body.model_dump(), "at": now()})
         return misthrow_state(throw_id)
 

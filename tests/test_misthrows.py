@@ -143,8 +143,10 @@ def test_grouping_is_cached_until_a_decision_changes(library, monkeypatch):
     # a fresh process reads the disk cache without regrouping
     Store._variant_cache.clear()
     Store._memo.clear()
-    Store(library.root).map_slice("de_test")
+    reread = by_id(Store(library.root).map_slice("de_test")["throws"])
     assert len(calls) == 2
+    assert reread["t10"]["misthrow"]["auto"]["rule"] == "bounce_back"
+    assert reread["t11"]["misthrow"]["flagged"] is True
 
 
 def test_curator_marks_restores_and_clears_through_the_api(library):
@@ -201,6 +203,44 @@ def test_misthrows_cannot_be_published_and_published_lessons_cannot_be_marked(li
     assert c.put("/api/plans/p1", headers=h, json=plan).status_code == 200
     # a draft plan does not block the decision
     assert c.put("/api/throws/t2/misthrow", headers=h, json=body).status_code == 200
+
+
+def test_throws_in_a_published_plan_are_protected(library):
+    c = TestClient(create_app(library.root, testing=True))
+    h = auth(c)
+    teaching = {**complete_teaching(library.root), "status": "review"}
+    plan = {
+        "id": "p1",
+        "title": "x",
+        "area": "Mid",
+        "side": "CT",
+        "purpose": "x",
+        "conditions": "x",
+        "steps": [{"throw_id": t, "role": "a", "time": 1} for t in ("t3", "t10")],
+        "status": "published",
+    }
+    for throw_id in ("t3", "t10"):
+        library.save_teaching(throw_id, teaching)
+    library.put("plans", "p1", plan)
+    # the bounce-back rule matches t10, but a published plan is built on it
+    state = c.get("/api/throws/t10").json()["misthrow"]
+    assert state["flagged"] is False and state["conflict"] is True
+    body = {"decision": "misthrow", "reviewer": "me"}
+    assert c.put("/api/throws/t3/misthrow", headers=h, json=body).status_code == 409
+
+
+def test_marking_the_first_throw_of_a_named_lineup_keeps_its_name(library):
+    c = TestClient(create_app(library.root, testing=True))
+    h = auth(c)
+    named = by_id(c.get("/api/catalog/maps/de_test").json()["throws"])["t1"]["variant_id"]
+    label = {"title": "中路窗口烟", "purpose": "封窗口", "reviewed": True, "reviewer": "me"}
+    assert c.put(f"/api/variants/{named}", headers=h, json=label).status_code == 200
+    body = {"decision": "misthrow", "reviewer": "me"}
+    assert c.put("/api/throws/t1/misthrow", headers=h, json=body).status_code == 200
+    after = c.get("/api/catalog/maps/de_test").json()
+    group = next(v for v in after["variants"] if "t2" in v["members"])
+    assert group["members"] == ["t2", "t3"] and group["title"] == "中路窗口烟"
+    assert group["reviewed"] is True
 
 
 def test_export_leaves_out_misthrows_but_keeps_them_on_the_round_timeline(library):

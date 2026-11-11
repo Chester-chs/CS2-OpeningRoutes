@@ -40,7 +40,7 @@ def main():
         for row in catalog["throws"]:
             row["teaching"] = {}
             if "misthrow" in row:
-                row["misthrow"] = {**row["misthrow"], "note": "", "reviewer": ""}
+                row["misthrow"] = {**row["misthrow"], "note": "", "reviewer": "", "at": ""}
         catalog["plans"] = []
         for row in catalog["rounds"]:
             row["review"] = {}

@@ -113,6 +113,34 @@ test("CT defence research shows patterns, method and round formation", async ({
   await expect(page.getByText(/CT 开局站位/)).toBeVisible();
 });
 
+test("misthrows are reviewed apart from the library and can be restored", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "道具库", exact: true }).click();
+  const count = async () =>
+    Number(await page.locator(".results strong").first().textContent());
+  await expect.poll(count).toBeGreaterThan(0);
+  const library = await count();
+  await page.getByLabel("教学状态").selectOption("misthrow");
+  await expect.poll(count).toBeLessThan(library);
+  const flagged = await count();
+  expect(flagged).toBeGreaterThan(0);
+  await page.locator('[data-testid="throw-card"]').first().click();
+  const state = page.getByTestId("misthrow-state");
+  await expect(state).toContainText("已标为失误");
+  await page.getByRole("button", { name: "完整回合", exact: true }).click();
+  await expect(page.getByText(/ · 失误/).first()).toBeVisible();
+  await page.getByRole("button", { name: "学习详情", exact: true }).click();
+  await page.getByRole("button", { name: "不是失误，恢复" }).click();
+  await expect(state).toContainText("人工确认不是失误");
+  await expect.poll(count).toBe(flagged - 1);
+  // undo, so the library is left as it was
+  await page.getByRole("button", { name: "撤销人工判断" }).click();
+  await expect(state).toContainText("已标为失误");
+  await expect.poll(count).toBe(flagged);
+});
+
 test("desktop studio opens from the summary and loads maps on demand", async ({
   page,
 }) => {

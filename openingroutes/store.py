@@ -58,8 +58,16 @@ def _throw_row(row: dict, match: dict, teachings: dict, overrides: dict) -> dict
     }
 
 
-def _published(teachings: dict) -> set:
-    return {key for key, t in teachings.items() if t.get("status") == "published"}
+def published_throws(teachings: dict, plans) -> set:
+    """Throws that carry a published lesson or are a step of a published plan."""
+    lessons = {key for key, t in teachings.items() if t.get("status") == "published"}
+    steps = {
+        step.get("throw_id")
+        for plan in plans
+        if plan.get("status") == "published"
+        for step in plan.get("steps", [])
+    }
+    return lessons | steps
 
 
 def _mark(rows: list, groups: list, auto: dict, decisions: dict, protected: set):
@@ -252,7 +260,8 @@ class Store:
                 catalog["rounds"].append(entry)
             catalog["throws"].extend(_throw_row(row, match, teachings, overrides) for row in match["throws"])
         stored = list(self.all("variants").values())
-        decisions, protected = self.all("misthrows"), _published(teachings)
+        decisions = self.all("misthrows")
+        protected = published_throws(teachings, catalog["plans"])
         groups, auto = evaluate(catalog["throws"], stored, decisions, protected)
         _mark(catalog["throws"], groups, auto, decisions, protected)
         catalog["variants"] = with_meta(groups, stored)
@@ -378,7 +387,8 @@ class Store:
                     entry["formation"] = compact_formation(formations[row["id"]])
                 rounds.append(entry)
             throws.extend(_throw_row(row, match, teachings, overrides) for row in match["throws"])
-        decisions, protected = self.all("misthrows"), _published(teachings)
+        decisions = self.all("misthrows")
+        protected = published_throws(teachings, self.all("plans").values())
         variants, auto = self.map_variants(map_name, throws, decisions, protected)
         _mark(throws, variants, auto, decisions, protected)
         for row in throws:
@@ -428,17 +438,13 @@ class Store:
         # Stored order matters when manual records overlap, so it is kept.
         manual = [(v["id"], v.get("members")) for v in stored if v.get("source") == "manual"]
         thresholds = [V.ORIGIN_RADIUS, V.ORIGIN_DZ, V.EFFECT_RADIUS, V.ANGLE_DEG]
-        rules = [M.RULES_VERSION, M.BOUNCE_RADIUS, M.OUTLIER_RADIUS, M.OUTLIER_MIN_MEMBERS]
-        rules += [M.BOUNCE_KINDS, M.STEEP_PITCH, M.KINDS]
+        rules = [M.RULES_VERSION, M.BOUNCE_RADIUS, M.BOUNCE_KINDS, M.STEEP_PITCH]
+        rules += [M.OUTLIER_RADIUS, M.OUTLIER_MIN_MEMBERS, M.KINDS]
         ids = {t["id"] for t in throws}
         decided = sorted((i, d.get("decision")) for i, d in decisions.items() if i in ids)
-        key = hashlib.sha256(
-            json.dumps(
-                [V.VARIANTS_VERSION, thresholds, rules, map_name, features, manual, decided]
-                + [sorted(protected & ids)],
-                sort_keys=True,
-            ).encode()
-        ).hexdigest()
+        inputs = [V.VARIANTS_VERSION, thresholds, rules, map_name, features, manual, decided]
+        inputs.append(sorted(protected & ids))
+        key = hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
         memory = Store._variant_cache.get((str(self.db), map_name))
         if memory and memory[0] == key:
             return V.with_meta(memory[1], stored), memory[2]

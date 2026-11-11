@@ -1,11 +1,12 @@
-"""Flag botched grenades so they stay out of lineups, statistics and lessons.
+"""Flag botched grenades so they stay out of lineups, lessons, plans and exports.
 
 Only strong signals are automatic, and only for one-off throws: a throw that someone
 repeated is deliberate, however odd it looks (pros throw an HE straight up from the Mirage
 window room, and it lands where it was released). A curator's decision always wins.
 
 Flags are derived on read because they depend on the variant groups; only the decisions are
-stored. The raw throw is never removed: it still shows on its round's timeline.
+stored. The raw throw is never removed: it still shows on its round's timeline, and CT
+research keeps counting it, because that measures what a team threw from where.
 """
 
 import math
@@ -33,7 +34,7 @@ RULES_VERSION = 1
 
 
 def hidden(throw_id: str, basis: dict | None, decisions: dict, protected: set) -> bool:
-    """Manual decisions first; the rules never hide a throw that carries a published lesson."""
+    """Manual decisions first; the rules never hide a throw that published content uses."""
     decision = (decisions.get(throw_id) or {}).get("decision")
     if decision:
         return decision == "misthrow"
@@ -97,7 +98,8 @@ def evaluate(
 ) -> tuple[list[dict], dict[str, dict]]:
     """Variant groups without the misthrows, and the rule that matched per throw id.
 
-    A matched rule is reported even when a decision or a published lesson keeps the throw.
+    A matched rule is reported even when a "keep" decision or published content keeps the
+    throw. Throws a curator marked are left out before the rules run.
     """
     kept = [t for t in throws if (decisions.get(t["id"]) or {}).get("decision") != "misthrow"]
     rows = {t["id"]: t for t in kept}
@@ -126,6 +128,6 @@ def status(throw_id: str, auto: dict, decisions: dict, protected: set) -> dict |
         "note": record.get("note", ""),
         "reviewer": record.get("reviewer", ""),
         "at": record.get("at", ""),
-        # A rule matched a throw that carries a published lesson: shown, never hidden.
+        # A rule matched a throw that a published lesson or plan uses: shown, never hidden.
         "conflict": bool(basis) and not flagged and not record.get("decision"),
     }
