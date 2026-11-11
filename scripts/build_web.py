@@ -31,7 +31,7 @@ def main():
     shutil.copytree(ROOT / "web/dist", destination)
     content = destination / "content"
     if not args.local_preview:
-        exported = export_bundle(store, store.root / "exports")
+        exported = export_bundle(store, store.root / "exports", include_pistols=True)
         shutil.copytree(exported, content)
     else:
         content.mkdir()
@@ -39,6 +39,8 @@ def main():
         # Local preview includes observed facts only, never private teaching drafts or personal notes.
         for row in catalog["throws"]:
             row["teaching"] = {}
+            if "misthrow" in row:
+                row["misthrow"] = {**row["misthrow"], "note": "", "reviewer": "", "at": ""}
         catalog["plans"] = []
         for row in catalog["rounds"]:
             row["review"] = {}

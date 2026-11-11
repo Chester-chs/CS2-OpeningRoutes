@@ -1,6 +1,8 @@
 import type {
   Catalog,
   Filters,
+  MapSlice,
+  Misthrow,
   Mode,
   Round,
   Teaching,
@@ -47,7 +49,28 @@ export const teachingLabels: Record<string, string> = {
   verified_on: "核验日期",
   map_version: "验证的游戏 / 地图版本",
   reproduction: "游戏内复现",
+  misthrow: "先恢复失误标记",
 };
+
+/** Full rows carry the state; exported round events only a marker. */
+export function isMisthrow(t: { misthrow?: Misthrow | boolean }) {
+  return typeof t.misthrow === "object"
+    ? t.misthrow.flagged
+    : Boolean(t.misthrow);
+}
+
+export function misthrowReason(m: Misthrow) {
+  const auto = !m.auto
+    ? ""
+    : m.auto.rule === "bounce_back"
+      ? `落点离出手点只有 ${m.auto.distance} 单位（撞墙弹回或掉在脚下）`
+      : `与同一出手点、同一瞄点的成熟投法相比，落点偏离 ${m.auto.distance} 单位`;
+  if (m.source === "auto") return auto ? `自动判定：${auto}` : "自动判定";
+  const decided = m.flagged ? "人工标为失误" : "人工确认不是失误";
+  return [decided, m.note, auto && `自动规则：${auto}`]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 function matchIds(c: Catalog, f: Filters) {
   return new Set(
@@ -77,8 +100,14 @@ export function filterThrows(c: Catalog, f: Filters) {
         t.origin_area === f.area ||
         t.effect_area === f.area ||
         t.teaching.area === f.area) &&
-      (!f.status ||
-        (f.status === "complete" ? t.gaps.length === 0 : t.gaps.length > 0)) &&
+      // Misthrows only show when asked for; the other statuses never include them.
+      (f.status === "misthrow"
+        ? isMisthrow(t)
+        : !isMisthrow(t) &&
+          (!f.status ||
+            (f.status === "complete"
+              ? t.gaps.length === 0
+              : t.gaps.length > 0))) &&
       (!q ||
         [
           t.player,
@@ -136,7 +165,7 @@ export function visibleRounds(c: Catalog, f: Filters, pistolOnly: boolean) {
 export function areaOptions(c: Catalog, map?: string) {
   const names = new Set<string>();
   for (const t of c.throws)
-    if (!map || t.map === map)
+    if ((!map || t.map === map) && !isMisthrow(t))
       for (const value of [t.origin_area, t.effect_area, t.teaching.area])
         if (typeof value === "string" && value) names.add(value);
   return [...names].sort();
@@ -151,6 +180,52 @@ export function variantPeers(
   const members = new Set(variant.members);
   const others = c.throws.filter((t) => t.id !== row.id && members.has(t.id));
   return { variant, others };
+}
+
+/** Replace one map's throws, rounds, variants and CT analysis; other maps stay as they are. */
+export function mergeSlice(c: Catalog, s: MapSlice): Catalog {
+  const order = new Map(c.matches.map((m, i) => [m.id, i]));
+  const rounds = new Map(s.rounds.map((r) => [r.id, r]));
+  const ct = { ...(c.ct_patterns || {}) };
+  delete ct[s.map];
+  return {
+    ...c,
+    throws: [...c.throws.filter((t) => t.map !== s.map), ...s.throws].sort(
+      (a, b) => (order.get(a.match_id) ?? 0) - (order.get(b.match_id) ?? 0),
+    ),
+    rounds: c.rounds.map((r) => rounds.get(r.id) || r),
+    // Ordered by map, so the result does not depend on which map loaded first.
+    variants: [
+      ...(c.variants || []).filter((v) => v.map !== s.map),
+      ...s.variants,
+    ].sort((a, b) => (a.map < b.map ? -1 : a.map > b.map ? 1 : 0)),
+    ct_patterns: { ...ct, ...s.ct_patterns },
+    loaded: [...new Set([...(c.loaded || []), s.map])],
+  };
+}
+
+/** A loaded map taken back out of the catalog, to keep it across a summary refresh. */
+export function sliceOf(c: Catalog, map: string): MapSlice {
+  const ids = new Set(c.matches.filter((m) => m.map === map).map((m) => m.id));
+  const ct = c.ct_patterns?.[map];
+  return {
+    map,
+    throws: c.throws.filter((t) => t.map === map),
+    rounds: c.rounds.filter((r) => ids.has(r.match_id)),
+    variants: (c.variants || []).filter((v) => v.map === map),
+    ct_patterns: ct ? { [map]: ct } : {},
+  };
+}
+
+export function mapOfThrow(c: Catalog, id: string) {
+  const matchId = id.split("-t")[0];
+  return c.matches.find((m) => m.id === matchId)?.map;
+}
+
+export function trajectoryPoints(
+  t: Pick<Throw, "trajectory" | "trajectory_preview">,
+) {
+  return t.trajectory || t.trajectory_preview || [];
 }
 
 export function pistolSummary(rounds: Round[], side?: string) {
@@ -201,7 +276,7 @@ export class DataClient {
         const session = await response.json();
         this.mode = "desktop";
         this.token = session.token;
-        return this.catalog();
+        return this.summary();
       }
     }
     this.mode = "web";
@@ -229,6 +304,29 @@ export class DataClient {
     const data = JSON.parse(new TextDecoder().decode(bytes));
     if (data.schema_version !== 1) throw new Error("内容格式不兼容。");
     return data;
+  }
+  /** Desktop studio: everything but throws, variants and formations. */
+  async summary(): Promise<Catalog> {
+    const response = await fetch("/api/catalog/summary");
+    if (!response.ok)
+      throw new Error("读取学习资料失败，请检查本地服务或内容包。");
+    const data = await response.json();
+    if (data.schema_version !== 1) throw new Error("内容格式不兼容。");
+    return data;
+  }
+  async loadMap(map: string): Promise<MapSlice> {
+    const response = await fetch(
+      `/api/catalog/maps/${encodeURIComponent(map)}`,
+    );
+    if (!response.ok) throw new Error(`读取地图 ${map} 的资料失败。`);
+    return response.json();
+  }
+  /** The full row with its trajectory; the static site already has it. */
+  async throwDetail(id: string): Promise<Throw | null> {
+    if (this.mode !== "desktop") return null;
+    const response = await fetch(`/api/throws/${encodeURIComponent(id)}`);
+    if (!response.ok) throw new Error("读取投掷详情失败。");
+    return response.json();
   }
   async timeline(id: string): Promise<Timeline> {
     const path =

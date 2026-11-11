@@ -11,16 +11,24 @@ from .domain import teaching_gaps
 from .store import Store, now
 
 
-def export_bundle(store: Store, output: Path) -> Path:
+def export_bundle(store: Store, output: Path, *, include_pistols: bool = False) -> Path:
     catalog = store.catalog()
     verified = {m["id"] for m in catalog["matches"] if m["source"]["verified"]}
+
+    def misthrow(t):
+        return (t.get("misthrow") or {}).get("flagged")
+
+    # The curator's misthrow notes stay in the studio.
     throws = [
-        t
+        {k: v for k, v in t.items() if k != "misthrow"}
         for t in catalog["throws"]
         if t["match_id"] in verified
         and t["teaching"].get("status") == "published"
         and not teaching_gaps(t["teaching"], source_verified=True)
+        and not misthrow(t)
     ]
+    excluded = {r["id"] for r in catalog["rounds"] if r.get("excluded")}
+    throws = [t for t in throws if t["round_id"] not in excluded]
     round_ids = {t["round_id"] for t in throws}
     round_ids.update(
         r["id"]
@@ -30,7 +38,31 @@ def export_bundle(store: Store, output: Path) -> Path:
         and r.get("review", {}).get("pro_video")
         and not r.get("excluded")
     )
-    rounds = [r for r in catalog["rounds"] if r["id"] in round_ids]
+    if include_pistols:
+        round_ids.update(
+            r["id"]
+            for r in catalog["rounds"]
+            if r["match_id"] in verified
+            and r["is_pistol"]
+            and r.get("complete")
+            and not r.get("excluded")
+            and not r.get("review_required")
+        )
+    events: dict[str, list] = {key: [] for key in round_ids}
+    for t in catalog["throws"]:
+        if t["round_id"] in events:
+            event = {k: t[k] for k in ("id", "tick", "player_id", "player", "kind", "side") if k in t}
+            # Still shown on the round timeline, labelled as a misthrow.
+            events[t["round_id"]].append({**event, "misthrow": True} if misthrow(t) else event)
+    rounds = [
+        {
+            **r,
+            "observed_throws": sorted(events[r["id"]], key=lambda t: t["tick"]),
+            "review": r["review"] if r["review"].get("approved") else {},
+        }
+        for r in catalog["rounds"]
+        if r["id"] in round_ids
+    ]
     match_ids = {r["match_id"] for r in rounds}
     matches = [m for m in catalog["matches"] if m["id"] in match_ids]
     throw_ids = {t["id"] for t in throws}
@@ -72,7 +104,25 @@ def export_bundle(store: Store, output: Path) -> Path:
             for v in catalog.get("variants", [])
             if any(m in throw_ids for m in v["members"])
         ]
-        used_maps = {m["map"] for m in matches}
+        # CT research is aggregated from source-verified matches only (Store.ct_patterns). The
+        # per-round lists stay in the studio; a representative round is linked only if exported.
+        exported_rounds = {r["id"] for r in rounds}
+        ct_patterns = {
+            map_name: {
+                **{k: v for k, v in analysis.items() if k != "assignments"},
+                "patterns": [
+                    {
+                        **{k: v for k, v in pattern.items() if k != "round_ids"},
+                        "representative": pattern.get("representative")
+                        if pattern.get("representative") in exported_rounds
+                        else "",
+                    }
+                    for pattern in analysis.get("patterns", [])
+                ],
+            }
+            for map_name, analysis in (catalog.get("ct_patterns") or {}).items()
+        }
+        used_maps = {m["map"] for m in matches} | set(ct_patterns)
         places = {k: v for k, v in catalog.get("places", {}).items() if k in used_maps}
         bundle = {
             "schema_version": 1,
@@ -82,6 +132,7 @@ def export_bundle(store: Store, output: Path) -> Path:
             "plans": plans,
             "variants": variants,
             "places": places,
+            "ct_patterns": ct_patterns,
         }
         (staging / "catalog.json").write_text(json.dumps(bundle, ensure_ascii=False), encoding="utf-8")
         checksums = {

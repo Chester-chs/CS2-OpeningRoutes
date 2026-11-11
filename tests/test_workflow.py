@@ -128,3 +128,62 @@ def test_complete_tutorial_export_copies_only_owned_referenced_media(tmp_path):
     assert (exported / "media/stance.png").exists()
     assert not (exported / "media/private.png").exists()
     assert str(Path(tmp_path)) not in (exported / "catalog.json").read_text(encoding="utf-8")
+
+
+def test_pistol_facts_export_keeps_observations_separate_from_lessons(tmp_path):
+    from openingroutes.publish import export_bundle
+
+    store = seed(tmp_path)
+    match = store.all("matches")["m1"]
+    match["rounds"][0].update(complete=True, review_required=False)
+    match["throws"][0].update(player_id="p1", teaching={"title": "private"})
+    store.save_match(match)
+    store.save_teaching("t1", {"title": "Private lesson"})
+    store.put("round_reviews", "m1-r1", {"description": "Private round draft"})
+    out = export_bundle(store, tmp_path / "export", include_pistols=True)
+    raw = (out / "catalog.json").read_text(encoding="utf-8")
+    catalog = json.loads(raw)
+    assert len(catalog["rounds"]) == 1 and catalog["throws"] == []
+    assert "Private" not in raw and catalog["rounds"][0]["review"] == {}
+    assert catalog["rounds"][0]["observed_throws"] == [
+        {"id": "t1", "player_id": "p1", "player": "A", "side": "CT", "kind": "smoke", "tick": 64}
+    ]
+    store.put("round_reviews", "m1-r1", {"resolution": "excluded"})
+    out = export_bundle(store, tmp_path / "excluded", include_pistols=True)
+    assert not json.loads((out / "catalog.json").read_text(encoding="utf-8"))["rounds"]
+
+
+def test_desktop_seed_restores_published_lesson_media_but_preserves_edits(tmp_path):
+    from openingroutes.desktop import install_seed
+    from openingroutes.domain import TEACHING_FIELDS
+    from scripts.build_desktop import prepare_seed
+
+    source = seed(tmp_path / "source")
+    media = source.root / "media"
+    (media / "demo.png").write_bytes(b"picture")
+    (media / "private.png").write_bytes(b"private")
+    lesson = dict.fromkeys(TEACHING_FIELDS, "checked")
+    lesson.update(
+        status="published",
+        reproduction="verified",
+        stance_image="media/demo.png",
+        aim_image="media/demo.png",
+        pro_video="https://example.org/demo.mp4",
+    )
+    source.save_teaching("t1", lesson)
+    source.save_teaching("private", {"status": "draft", "title": "Secret draft"})
+    bundle = tmp_path / "seed"
+    bundle.mkdir()
+    prepare_seed(source.root, bundle)
+    target = tmp_path / "installed"
+    install_seed(target, bundle)
+    installed = Store(target)
+    assert installed.all("teachings") == {"t1": lesson}
+    assert (target / "media/demo.png").read_bytes() == b"picture"
+    assert (target / "cache/ct_patterns.json").read_bytes() == (
+        source.root / "cache/ct_patterns.json"
+    ).read_bytes()
+    assert not (target / "media/private.png").exists()
+    installed.save_teaching("t1", {"title": "my notes"})
+    install_seed(target, bundle)
+    assert installed.all("teachings")["t1"]["title"] == "my notes"

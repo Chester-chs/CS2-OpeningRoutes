@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { BookOpen, ClipboardPlus, Eye } from "lucide-react";
-import { DataClient, kindNames } from "./data";
+import { DataClient, isMisthrow, kindNames } from "./data";
 import type {
   AreaShares,
   Catalog,
@@ -98,7 +98,8 @@ export function draftPlan(
       (t) =>
         t.round_id === pattern.representative &&
         t.side === "CT" &&
-        t.time <= 20,
+        t.time <= 20 &&
+        !isMisthrow(t),
     )
     .sort((a, b) => a.time - b.time)
     .map((t) => ({
@@ -136,33 +137,39 @@ export default function CTPatterns({
   catalog,
   onRefresh,
   openRound,
+  onSelectMap,
+  loadingMaps = [],
 }: {
   client: DataClient;
   catalog: Catalog;
   onRefresh: () => void;
   openRound: (id: string) => void;
+  onSelectMap?: (map: string) => void;
+  loadingMaps?: string[];
 }) {
   const analyses = catalog.ct_patterns || {};
-  const maps = Object.keys(analyses).sort();
+  // The desktop studio lists every map from the summary; analyses arrive per map.
+  const maps = [
+    ...new Set([
+      ...Object.keys(analyses),
+      ...(catalog.maps || []).map((m) => m.map),
+    ]),
+  ].sort();
   const [chosen, setMap] = useState("");
-  const map = maps.includes(chosen) ? chosen : maps[0] || "";
+  const map = maps.includes(chosen)
+    ? chosen
+    : maps.find((m) => analyses[m]) || maps[0] || "";
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("patterns");
   const [message, setMessage] = useState("");
   const analysis = analyses[map];
-  if (!analysis)
-    return (
-      <div className="empty">
-        <h3>还没有可分析的 CT 回合</h3>
-        <p>导入并核对职业比赛来源后，这里会按地图自动生成 CT 防守阵型。</p>
-      </div>
-    );
-  return (
-    <>
-      <div className="section-line">
-        <p className="muted">
-          按论文 TAGNet 的流程，从职业 CT 回合的 10/12/15/18/20
-          秒站位归纳防守阵型，并进一步学习每支战队、每名选手的习惯站位。
-        </p>
+  const loaded = !catalog.maps || (catalog.loaded || []).includes(map);
+  const header = (
+    <div className="section-line">
+      <p className="muted">
+        按论文 TAGNet 的流程，从职业 CT 回合的 10/12/15/18/20
+        秒站位归纳防守阵型，并进一步学习每支战队、每名选手的习惯站位。
+      </p>
+      {maps.length > 0 && (
         <div className="chips map-chips" role="tablist" aria-label="选择地图">
           {maps.map((m) => (
             <button
@@ -170,13 +177,56 @@ export default function CTPatterns({
               role="tab"
               aria-selected={m === map}
               className={m === map ? "chip active" : "chip"}
-              onClick={() => setMap(m)}
+              onClick={() => {
+                setMap(m);
+                onSelectMap?.(m);
+              }}
             >
-              {m.replace("de_", "")} <b>{analyses[m].rounds}</b>
+              {m.replace("de_", "")}{" "}
+              <b>
+                {analyses[m]
+                  ? analyses[m].rounds
+                  : loadingMaps.includes(m)
+                    ? "载入中"
+                    : "未载入"}
+              </b>
             </button>
           ))}
         </div>
-      </div>
+      )}
+    </div>
+  );
+  if (!analysis)
+    return (
+      <>
+        {header}
+        {map && !loaded ? (
+          <div className="empty">
+            <h3>
+              {loadingMaps.includes(map)
+                ? `正在载入 ${map.replace("de_", "")} 的 CT 回合…`
+                : `${map.replace("de_", "")} 还没有载入`}
+            </h3>
+            {!loadingMaps.includes(map) && (
+              <button
+                className="button secondary"
+                onClick={() => onSelectMap?.(map)}
+              >
+                载入这张地图
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="empty">
+            <h3>还没有可分析的 CT 回合</h3>
+            <p>导入并核对职业比赛来源后，这里会按地图自动生成 CT 防守阵型。</p>
+          </div>
+        )}
+      </>
+    );
+  return (
+    <>
+      {header}
       <div className="stats">
         <div className="stat">
           <span>CT 回合</span>
@@ -349,12 +399,15 @@ function PatternCard({
         常用战队：{teams.map(([t, v]) => `${t} ${v}`).join(" · ")}
       </p>
       <div className="card-actions">
-        <button
-          className="text-button"
-          onClick={() => openRound(p.representative)}
-        >
-          <Eye size={14} /> 代表回合
-        </button>
+        {p.representative &&
+          catalog.rounds.some((r) => r.id === p.representative) && (
+            <button
+              className="text-button"
+              onClick={() => openRound(p.representative)}
+            >
+              <Eye size={14} /> 代表回合
+            </button>
+          )}
         {canEdit && (
           <button className="text-button" onClick={onDraft}>
             <ClipboardPlus size={14} /> 生成方案草稿

@@ -4,6 +4,9 @@ test("real catalog supports utility, whole-round context and independent pistol 
   page,
 }) => {
   await page.goto("/");
+  await expect(page.locator('[data-ready="true"]')).toBeVisible({
+    timeout: 60000,
+  });
   await expect(
     page.getByRole("heading", { name: /从比赛里\s*找到答案。/ }),
   ).toBeVisible();
@@ -28,8 +31,18 @@ test("real catalog supports utility, whole-round context and independent pistol 
   await expect(
     page.locator('[data-testid="round-card"]').first(),
   ).toBeVisible();
-  await page.locator('[data-testid="round-card"]').first().click();
+  await page
+    .getByLabel("比赛", { exact: true })
+    .selectOption("bf4c2f24a8c2a347a82e");
+  await page.getByTestId("round-card").filter({ hasText: "R01" }).click();
   await expect(page.getByText("冻结结束装备")).toBeVisible();
+  await page.getByRole("button", { name: "完整回合", exact: true }).click();
+  const event = page.getByRole("button", { name: /秒 · CT · Magisk/ });
+  await event.click();
+  const seconds = Number((await event.innerText()).split(" 秒")[0]);
+  await expect(page.locator(".time-line")).toContainText(
+    `冻结结束后 ${seconds.toFixed(2)} 秒`,
+  );
 });
 
 test("teaching draft persists but missing evidence prevents publication", async ({
@@ -98,4 +111,55 @@ test("CT defence research shows patterns, method and round formation", async ({
   await page.getByRole("tab", { name: "防守阵型" }).click();
   await page.getByRole("button", { name: "代表回合" }).first().click();
   await expect(page.getByText(/CT 开局站位/)).toBeVisible();
+});
+
+test("misthrows are reviewed apart from the library and can be restored", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "道具库", exact: true }).click();
+  const count = async () =>
+    Number(await page.locator(".results strong").first().textContent());
+  await expect.poll(count).toBeGreaterThan(0);
+  const library = await count();
+  await page.getByLabel("教学状态").selectOption("misthrow");
+  await expect.poll(count).toBeLessThan(library);
+  const flagged = await count();
+  expect(flagged).toBeGreaterThan(0);
+  await page.locator('[data-testid="throw-card"]').first().click();
+  const state = page.getByTestId("misthrow-state");
+  await expect(state).toContainText("已标为失误");
+  await page.getByRole("button", { name: "完整回合", exact: true }).click();
+  await expect(page.getByText(/ · 失误/).first()).toBeVisible();
+  await page.getByRole("button", { name: "学习详情", exact: true }).click();
+  await page.getByRole("button", { name: "不是失误，恢复" }).click();
+  await expect(state).toContainText("人工确认不是失误");
+  await expect.poll(count).toBe(flagged - 1);
+  // undo, so the library is left as it was
+  await page.getByRole("button", { name: "撤销人工判断" }).click();
+  await expect(state).toContainText("已标为失误");
+  await expect.poll(count).toBe(flagged);
+});
+
+test("desktop studio opens from the summary and loads maps on demand", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const loader = page.getByRole("region", { name: "按地图载入资料" });
+  await expect(loader.getByText("已载入 1/2 张地图")).toBeVisible();
+  await page.getByRole("button", { name: "道具库", exact: true }).click();
+  const count = async () =>
+    Number(await page.locator(".results strong").first().textContent());
+  const before = await count();
+  expect(before).toBeGreaterThan(0);
+  await loader.getByRole("button", { name: /点击载入/ }).click();
+  await expect(loader.getByText("已载入 2/2 张地图")).toBeVisible();
+  await expect.poll(count).toBeGreaterThan(before);
+  await page.getByRole("button", { name: "CT 防守研究", exact: true }).click();
+  const tabs = page.getByRole("tablist", { name: "选择地图" }).getByRole("tab");
+  await expect(tabs).toHaveCount(2);
+  for (const tab of await tabs.all()) {
+    await tab.click();
+    await expect(page.locator(".pattern-card").first()).toBeVisible();
+  }
 });

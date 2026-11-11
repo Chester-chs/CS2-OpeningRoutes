@@ -43,7 +43,9 @@ export type Throw = {
   inventory: string[] | null;
   effect_position: (number | null)[] | null;
   effect_tick: number | null;
-  trajectory: number[][];
+  // Desktop map slices carry only a short preview; the full path is fetched per throw.
+  trajectory?: number[][];
+  trajectory_preview?: number[][];
   trajectory_status: string;
   is_pistol: boolean;
   teaching: Teaching;
@@ -54,6 +56,22 @@ export type Throw = {
   effect_area?: string;
   effect_place_basis?: { method: string; distance: number } | null;
   variant_id?: string | null;
+  misthrow?: Misthrow;
+};
+// A botched grenade: hidden from lineups and lessons, still shown on its round's timeline.
+export type Misthrow = {
+  flagged: boolean;
+  source: "auto" | "manual";
+  auto: {
+    rule: "bounce_back" | "variant_outlier";
+    distance: number;
+    variant_id?: string;
+  } | null;
+  note: string;
+  reviewer: string;
+  at: string;
+  // A rule matched, but the throw carries a published lesson and stays visible.
+  conflict: boolean;
 };
 export type Variant = {
   id: string;
@@ -77,6 +95,10 @@ export type Equipment = {
   armor: number | null;
 };
 export type Round = {
+  observed_throws?: (Pick<
+    Throw,
+    "id" | "player_id" | "player" | "kind" | "tick" | "side"
+  > & { misthrow?: boolean })[];
   id: string;
   match_id: string;
   number: number;
@@ -134,6 +156,23 @@ export type Catalog = {
   places?: Record<string, Record<string, string>>;
   place_areas?: Record<string, Record<string, string>>;
   ct_patterns?: Record<string, CTAnalysis>;
+  // Desktop studio: per-map counts from the summary, and the maps merged in so far.
+  maps?: MapSummary[];
+  loaded?: string[];
+};
+export type MapSummary = {
+  map: string;
+  matches: number;
+  rounds: number;
+  throws: number;
+  complete: number;
+};
+export type MapSlice = {
+  map: string;
+  throws: Throw[];
+  rounds: Round[];
+  variants: Variant[];
+  ct_patterns: Record<string, CTAnalysis>;
 };
 export type AreaShares = Record<string, number>;
 export type CTPattern = {

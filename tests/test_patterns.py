@@ -1,3 +1,4 @@
+import json
 import random
 
 from openingroutes.formations import canonical_teams, finalize_formations
@@ -177,3 +178,77 @@ def test_catalog_serves_ct_patterns_and_area_edits_recompute(tmp_path):
     assert cat["places"]["de_mirage"]["Connector"] == "连接"
     setups = {s["setup"] for p in cat["ct_patterns"]["de_mirage"]["patterns"] for s in p["setups"]}
     assert "A3 · B2" in setups and "A2 · 中1 · B2" not in setups
+
+
+def test_static_export_carries_ct_research_without_private_round_lists(tmp_path):
+    from openingroutes.publish import export_bundle
+    from openingroutes.store import Store
+
+    forms = library(60)
+    store = Store(tmp_path / "lib")
+    store.save_match(
+        {
+            "id": "m1",
+            "map": "de_mirage",
+            "source": {
+                "event": "Synthetic",
+                "match": "Alpha vs Beta",
+                "date": "2025-01-01",
+                "url": "https://example.org/m",
+                "verified": True,
+                "reviewer": "test",
+            },
+            "sha256": "d" * 64,
+            "rounds": [
+                {"id": f["round_id"], "match_id": "m1", "number": i + 1, "is_pistol": False, "complete": True}
+                for i, f in enumerate(forms)
+            ],
+            "throws": [],
+            "formations": {f["round_id"]: f for f in forms},
+            "formations_version": 1,
+            "warnings": [],
+        }
+    )
+    out = export_bundle(store, tmp_path / "export")
+    bundle = json.loads((out / "catalog.json").read_text(encoding="utf-8"))
+    analysis = bundle["ct_patterns"]["de_mirage"]
+    assert analysis["rounds"] == 60 and analysis["patterns"] and analysis["team_habits"]
+    assert "assignments" not in analysis
+    for pattern in analysis["patterns"]:
+        assert "round_ids" not in pattern
+        # The representative round is not part of this export, so it is not linked.
+        assert pattern["representative"] == ""
+    assert "de_mirage" in bundle["places"]
+    manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["files"]["catalog.json"]
+
+
+def test_unverified_matches_stay_out_of_exported_ct_research(tmp_path):
+    from openingroutes.publish import export_bundle
+    from openingroutes.store import Store
+
+    forms = library(60)
+    store = Store(tmp_path / "lib")
+    store.save_match(
+        {
+            "id": "m2",
+            "map": "de_mirage",
+            "source": {
+                "event": "Synthetic",
+                "match": "Alpha vs Beta",
+                "date": "2025-01-01",
+                "verified": False,
+            },
+            "sha256": "e" * 64,
+            "rounds": [
+                {"id": f["round_id"], "match_id": "m2", "number": i + 1, "is_pistol": False, "complete": True}
+                for i, f in enumerate(forms)
+            ],
+            "throws": [],
+            "formations": {f["round_id"]: f for f in forms},
+            "formations_version": 1,
+            "warnings": [],
+        }
+    )
+    out = export_bundle(store, tmp_path / "export")
+    assert json.loads((out / "catalog.json").read_text(encoding="utf-8"))["ct_patterns"] == {}

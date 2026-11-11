@@ -1,20 +1,41 @@
 import { useEffect, useMemo, useState } from "react";
-import { DataClient } from "./data";
+import { DataClient, isMisthrow, kindNames } from "./data";
 import type { Round, Throw, Timeline as TimelineData } from "./types";
 
 export default function Timeline({
   client,
   round,
   throwRow,
+  throws,
 }: {
   client: DataClient;
   round: Round;
   throwRow?: Throw;
+  throws: Throw[];
 }) {
   const [data, setData] = useState<TimelineData | null>(null);
   const [error, setError] = useState("");
   const [seconds, setSeconds] = useState(throwRow?.time || 0);
   const [selected, setSelected] = useState<string[]>([]);
+  const [path, setPath] = useState<number[][] | null>(null);
+  const throwId = throwRow?.id;
+  const hasPath = Boolean(throwRow?.trajectory);
+  useEffect(() => {
+    // Desktop slices only carry a preview; fetch this throw's full flight path.
+    let active = true;
+    setPath(null);
+    if (throwId && !hasPath)
+      client
+        .throwDetail(throwId)
+        .then((row) => {
+          if (active && row?.trajectory) setPath(row.trajectory);
+        })
+        .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [client, throwId, hasPath]);
+  const flight = throwRow?.trajectory || path || [];
   useEffect(() => {
     let active = true;
     setData(null);
@@ -58,6 +79,26 @@ export default function Timeline({
   const max =
     ((round.end_tick || round.freeze_end_tick) - round.freeze_end_tick) /
     data.tick_rate;
+  const events =
+    round.observed_throws ?? throws.filter((t) => t.round_id === round.id);
+  const markers = [
+    ...events.map((t) => ({
+      tick: t.tick,
+      label: `${t.side} · ${t.player} · ${kindNames[t.kind] ?? t.kind}${isMisthrow(t) ? " · 失误" : ""}`,
+    })),
+    ...(round.opening_kill
+      ? [
+          {
+            tick: round.opening_kill.tick,
+            label: `首杀 · ${round.opening_kill.attacker} → ${round.opening_kill.victim}`,
+          },
+        ]
+      : []),
+    ...round.bomb_events.map((e) => ({
+      tick: e.tick,
+      label: `${({ bomb_planted: "下包", bomb_defused: "拆包", bomb_exploded: "爆炸" } as Record<string, string>)[e.kind] ?? e.kind} · ${e.player || "—"}`,
+    })),
+  ].sort((a, b) => a.tick - b.tick);
   return (
     <section className="timeline">
       <div className="section-line">
@@ -124,11 +165,9 @@ export default function Timeline({
               </g>
             );
           })}
-        {throwRow?.trajectory.length ? (
+        {flight.length ? (
           <polyline
-            points={throwRow.trajectory
-              .map((v) => `${x(v[1])},${y(v[2])}`)
-              .join(" ")}
+            points={flight.map((v) => `${x(v[1])},${y(v[2])}`).join(" ")}
             fill="none"
             stroke="#fff"
             strokeDasharray="4 3"
@@ -167,6 +206,21 @@ export default function Timeline({
             {p.name}
           </label>
         ))}
+      </div>
+      <h3>回合事件</h3>
+      <p className="micro">
+        时间从冻结结束算起。选择事件可查看该时刻双方的位置。
+      </p>
+      <div className="chips">
+        {markers.map((m, i) => {
+          const at = (m.tick - round.freeze_end_tick) / data.tick_rate;
+          return (
+            <button key={i} className="chip" onClick={() => setSeconds(at)}>
+              {at.toFixed(2)} 秒 · {m.label}
+            </button>
+          );
+        })}
+        {!markers.length && <span>此回合暂无可定位的事件。</span>}
       </div>
     </section>
   );

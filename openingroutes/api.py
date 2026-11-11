@@ -12,8 +12,8 @@ from typing import Annotated, Literal
 from urllib.parse import urlsplit
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -21,9 +21,10 @@ from .domain import safe_url, teaching_gaps
 from .models import Source, Teaching
 from .places import valid_place
 from .publish import export_bundle
-from .store import Store, now
+from .store import Store, now, published_throws
 
 ID = r"^[A-Za-z0-9_-]{1,150}$"
+MAP = r"^[a-z0-9_]{1,40}$"
 MAX_DEMO = 2 * 1024**3
 
 
@@ -60,6 +61,13 @@ class PlaceLabel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     label: str | None = Field(default=None, min_length=1, max_length=60)
     area: Literal["A", "B", "Mid", "CT", "other"] | None = None
+
+
+class MisthrowDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    decision: Literal["misthrow", "keep"]
+    note: str = Field(default="", max_length=2000)
+    reviewer: str = Field(default="", max_length=100)
 
 
 class Step(BaseModel):
@@ -146,8 +154,9 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
         )
         return response
 
-    def find(collection, item_id):
-        return next((x for x in store.catalog()[collection] if x["id"] == item_id), None)
+    def encoded(value):
+        # Large payloads: the stdlib encoder is much faster than FastAPI's generic conversion.
+        return Response(json.dumps(value, ensure_ascii=False, allow_nan=False), media_type="application/json")
 
     @app.get("/api/session")
     def session():
@@ -155,7 +164,78 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
 
     @app.get("/api/catalog")
     def catalog():
-        return store.catalog()
+        return encoded(store.catalog())
+
+    @app.get("/api/catalog/summary")
+    def catalog_summary():
+        return encoded(store.summary())
+
+    @app.get("/api/catalog/maps/{map_name}")
+    def catalog_map(map_name: str):
+        if not re.fullmatch(MAP, map_name):
+            raise HTTPException(422, "Invalid map")
+        data = store.map_slice(map_name)
+        if data is None:
+            raise HTTPException(404, "Map not found")
+        return encoded(data)
+
+    @app.get("/api/throws/{throw_id}")
+    def throw_detail(throw_id: str):
+        if not re.fullmatch(ID, throw_id):
+            raise HTTPException(422, "Invalid throw")
+        row = store.throw(throw_id)
+        if row is None:
+            raise HTTPException(404, "Throw not found")
+        return encoded(row)
+
+    @app.get("/api/throws")
+    def throws_by_id(ids: str = Query(max_length=200 * 151)):
+        wanted = [i for i in dict.fromkeys(ids.split(",")) if i]
+        if len(wanted) > 200 or any(not re.fullmatch(ID, i) for i in wanted):
+            raise HTTPException(422, "Give at most 200 valid throw ids")
+        return encoded(store.throws_by_id(wanted))
+
+    def misthrow_state(throw_id):
+        row = store.throws_by_id([throw_id])
+        return row[0].get("misthrow") if row else None
+
+    @app.put("/api/throws/{throw_id}/misthrow")
+    def decide_misthrow(throw_id: str, body: MisthrowDecision):
+        if not re.fullmatch(ID, throw_id):
+            raise HTTPException(422, "Invalid throw")
+        raw, match = store.locate(throw_id)
+        if raw is None:
+            raise HTTPException(404, "Throw not found")
+        if body.decision == "misthrow":
+            # Hiding the throw would silently drop its lesson, or a plan built on it, from exports.
+            if throw_id in published_throws(store.all("teachings"), store.all("plans").values()):
+                raise HTTPException(409, "Withdraw the published lesson or plan that uses this throw first")
+            # An automatic lineup is named after its earliest throw. Hiding that throw would
+            # rename the group and lose a curator's label, so the rest is pinned first.
+            variants = store.map_slice(match["map"])["variants"]
+            variant = next((v for v in variants if v["members"][0] == throw_id), None)
+            if (
+                variant
+                and variant["source"] == "auto"
+                and len(variant["members"]) > 1
+                and (variant["title"] or variant["purpose"] or variant["reviewed"])
+            ):
+                pinned = "v-" + uuid4().hex[:12]
+                record = {"id": pinned, "source": "manual", "members": variant["members"][1:]}
+                store.put("variants", pinned, {**record, **stored_meta(variant)})
+                if variant["id"] in store.all("variants"):
+                    store.delete("variants", variant["id"])
+        store.put("misthrows", throw_id, {**body.model_dump(), "at": now()})
+        return misthrow_state(throw_id)
+
+    @app.delete("/api/throws/{throw_id}/misthrow")
+    def clear_misthrow(throw_id: str):
+        if not re.fullmatch(ID, throw_id):
+            raise HTTPException(422, "Invalid throw")
+        if throw_id not in store.all("misthrows"):
+            raise HTTPException(404, "No decision recorded for this throw")
+        store.delete("misthrows", throw_id)
+        return misthrow_state(throw_id)
 
     @app.get("/api/timelines/{round_id}")
     def timeline(round_id: str):
@@ -280,10 +360,9 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
 
     @app.put("/api/teachings/{throw_id}")
     def save_teaching(throw_id: str, teaching: Teaching):
-        row = find("throws", throw_id)
+        row, match = store.locate(throw_id)
         if row is None:
             raise HTTPException(404, "Throw not found")
-        match = find("matches", row["match_id"])
         data = teaching.model_dump()
         confirmed = data.pop("verification_confirmed")
         previous = store.all("teachings").get(throw_id, {})
@@ -306,6 +385,8 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
         ):
             data["reproduction"] = "pending"
         gaps = teaching_gaps(data, source_verified=match["source"]["verified"])
+        if (misthrow_state(throw_id) or {}).get("flagged"):
+            gaps.append("misthrow")
         for key in ("stance_image", "aim_image", "pro_video", "recreation_video"):
             asset = data.get(key, "")
             if asset.startswith("media/") and not (root / asset).is_file():
@@ -353,8 +434,9 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
         return review
 
     def variant_index():
-        data = store.catalog()
-        return data, {v["id"]: v for v in data["variants"]}
+        maps = [m["map"] for m in store.summary()["maps"]]
+        variants = [v for m in maps for v in store.map_slice(m)["variants"]]
+        return None, {v["id"]: v for v in variants}
 
     def stored_meta(variant):
         return {k: variant.get(k) for k in ("title", "purpose", "reviewed", "reviewer")}
@@ -439,7 +521,7 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
     def save_plan(plan_id: str, plan: Plan):
         if plan_id != plan.id:
             raise HTTPException(422, "Plan ID mismatch")
-        available = {t["id"]: t for t in store.catalog()["throws"]}
+        available = {t["id"]: t for t in store.throws_by_id([s.throw_id for s in plan.steps])}
         if any(s.throw_id not in available for s in plan.steps):
             raise HTTPException(422, "Plan references a missing throw")
         if plan.status == "published" and any(available[s.throw_id]["gaps"] for s in plan.steps):
@@ -479,7 +561,7 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
     @app.post("/api/export")
     def export():
         try:
-            path = export_bundle(store, root / "exports")
+            path = export_bundle(store, root / "exports", include_pistols=True)
         except ValueError as e:
             raise HTTPException(422, str(e)) from e
         shutil.make_archive(str(path), "zip", path)
