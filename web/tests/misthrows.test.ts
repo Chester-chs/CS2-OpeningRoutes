@@ -37,7 +37,9 @@ const row = (id: string, extra = {}) => ({
 });
 const catalog = {
   schema_version: 1,
-  matches: [{ id: "m", map: "de_test", source: { verified: true, date: "2025-01-01" } }],
+  matches: [
+    { id: "m", map: "de_test", source: { verified: true, date: "2025-01-01" } },
+  ],
   rounds: [],
   plans: [],
   throws: [
@@ -49,14 +51,16 @@ const catalog = {
 
 describe("misthrown grenades", () => {
   it("are hidden from the library unless asked for", () => {
-    expect(filterThrows(catalog, {}).map((t) => t.id)).toEqual(["good", "kept"]);
-    expect(filterThrows(catalog, { status: "pending" }).map((t) => t.id)).toEqual([
+    expect(filterThrows(catalog, {}).map((t) => t.id)).toEqual([
       "good",
       "kept",
     ]);
-    expect(filterThrows(catalog, { status: "misthrow" }).map((t) => t.id)).toEqual([
-      "botched",
-    ]);
+    expect(
+      filterThrows(catalog, { status: "pending" }).map((t) => t.id),
+    ).toEqual(["good", "kept"]);
+    expect(
+      filterThrows(catalog, { status: "misthrow" }).map((t) => t.id),
+    ).toEqual(["botched"]);
     expect(areaOptions(catalog)).toEqual(["area-good", "area-kept"]);
   });
   it("are recognised on full rows and on exported round events", () => {
@@ -69,7 +73,9 @@ describe("misthrown grenades", () => {
     expect(misthrowReason(flag())).toContain("132");
     expect(
       misthrowReason(
-        flag({ auto: { rule: "variant_outlier", distance: 912, variant_id: "v" } }),
+        flag({
+          auto: { rule: "variant_outlier", distance: 912, variant_id: "v" },
+        }),
       ),
     ).toContain("912");
     expect(
