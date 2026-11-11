@@ -25,19 +25,28 @@ def evaluate(rows, *, decisions=None, protected=()):
     return {m: g for g in groups for m in g["members"]}, auto
 
 
-def test_bounce_back_flags_only_grenades_that_land_next_to_the_release():
+def test_bounce_back_flags_one_off_smokes_and_he_that_land_next_to_the_release():
     rows = [
         throw("t1", "A", effect=(199, 0, 0)),
         throw("t2", "A", pos=(5000, 0, 0), effect=(5200, 0, 0)),  # exactly at the radius: kept
-        throw("t3", "A", pos=(0, 5000, 0), effect=(0, 5100, 0), kind="flash"),
+        throw("t3", "A", pos=(0, 5000, 0), effect=(0, 5100, 0), kind="flash"),  # overhead pop flash
         throw("t4", "A", pos=(0, 9000, 0), effect=(0, 9100, 0), kind="he"),
         throw("t5", "A", pos=(9000, 0, 0), effect=None, kind="molotov"),  # no landing point recorded
         throw("t6", "A", pos=(9000, 9000, 0), effect=(9000, 9050, 0), kind="decoy"),
+        # thrown straight up: it comes down where it was released by design
+        throw("t7", "A", pos=(-5000, 0, 0), effect=(-5000, 5, 0), kind="he", pitch=-89.0),
     ]
     by_member, auto = evaluate(rows)
-    assert sorted(auto) == ["t1", "t3", "t4"]
+    assert sorted(auto) == ["t1", "t4"]
     assert auto["t1"] == {"rule": "bounce_back", "distance": 199}
-    assert sorted(by_member) == ["t2", "t5", "t6"]
+    assert sorted(by_member) == ["t2", "t3", "t5", "t6", "t7"]
+
+
+def test_a_repeated_throw_is_deliberate_even_when_it_lands_next_to_the_release():
+    # Several players throwing an HE straight up from the same spot is a lineup, not a mistake.
+    rows = [throw(f"t{i}", f"P{i}", pos=(i, 0, 0), effect=(i, 5, 0), kind="he") for i in (1, 2)]
+    by_member, auto = evaluate(rows)
+    assert auto == {} and by_member["t1"]["members"] == ["t1", "t2"]
 
 
 def test_single_throw_far_from_an_established_lineup_is_an_outlier():

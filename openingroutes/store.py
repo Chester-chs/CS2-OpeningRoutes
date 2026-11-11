@@ -428,7 +428,8 @@ class Store:
         # Stored order matters when manual records overlap, so it is kept.
         manual = [(v["id"], v.get("members")) for v in stored if v.get("source") == "manual"]
         thresholds = [V.ORIGIN_RADIUS, V.ORIGIN_DZ, V.EFFECT_RADIUS, V.ANGLE_DEG]
-        rules = [M.RULES_VERSION, M.BOUNCE_RADIUS, M.OUTLIER_RADIUS, M.OUTLIER_MIN_MEMBERS, M.KINDS]
+        rules = [M.RULES_VERSION, M.BOUNCE_RADIUS, M.OUTLIER_RADIUS, M.OUTLIER_MIN_MEMBERS]
+        rules += [M.BOUNCE_KINDS, M.STEEP_PITCH, M.KINDS]
         ids = {t["id"] for t in throws}
         decided = sorted((i, d.get("decision")) for i, d in decisions.items() if i in ids)
         key = hashlib.sha256(
