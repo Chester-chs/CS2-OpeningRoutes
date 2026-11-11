@@ -17,7 +17,7 @@ VARIANTS_VERSION = 1
 META = ("title", "purpose", "reviewed", "reviewer")
 
 
-def _num(values, n):
+def numbers(values, n):
     if not isinstance(values, list | tuple) or len(values) < n:
         return None
     if any(not isinstance(v, int | float) or isinstance(v, bool) for v in values[:n]):
@@ -33,9 +33,9 @@ def _angle(a, b):
 Features = tuple[tuple, tuple[float, float], float, list[float], float, float]
 
 
-def _features(t: dict) -> Features | None:
+def features(t: dict) -> Features | None:
     """Parsed comparison fields, or None when a throw can never join a lineup."""
-    position, effect = _num(t.get("position"), 3), _num(t.get("effect_position"), 2)
+    position, effect = numbers(t.get("position"), 3), numbers(t.get("effect_position"), 2)
     view = t.get("view")
     if not (position and effect) or not isinstance(view, dict):
         return None
@@ -46,24 +46,27 @@ def _features(t: dict) -> Features | None:
     return key, (position[0], position[1]), position[2], effect, yaw, pitch
 
 
+def same_release(fa: Features, fb: Features) -> bool:
+    """Same map, grenade and side, thrown from the same spot with the same aim."""
+    return (
+        fa[0] == fb[0]
+        and math.dist(fa[1], fb[1]) <= ORIGIN_RADIUS
+        and abs(fa[2] - fb[2]) <= ORIGIN_DZ
+        and _angle(fa[4], fb[4]) <= ANGLE_DEG
+        and _angle(fa[5], fb[5]) <= ANGLE_DEG
+    )
+
+
 def _same(fa: Features | None, fb: Features | None) -> bool:
     """Whether two parsed throws fall within every lineup threshold."""
-    if fa is None or fb is None or fa[0] != fb[0]:
+    if fa is None or fb is None:
         return False
-    _, xy_a, z_a, ea, yaw_a, pitch_a = fa
-    _, xy_b, z_b, eb, yaw_b, pitch_b = fb
-    return (
-        math.dist(xy_a, xy_b) <= ORIGIN_RADIUS
-        and abs(z_a - z_b) <= ORIGIN_DZ
-        and math.dist(ea, eb) <= EFFECT_RADIUS
-        and _angle(yaw_a, yaw_b) <= ANGLE_DEG
-        and _angle(pitch_a, pitch_b) <= ANGLE_DEG
-    )
+    return same_release(fa, fb) and math.dist(fa[3], fb[3]) <= EFFECT_RADIUS
 
 
 def same_lineup(a: dict, b: dict) -> bool:
     """Convenience wrapper over the parsed comparison used by cluster()."""
-    return _same(_features(a), _features(b))
+    return _same(features(a), features(b))
 
 
 def _order(t):
@@ -83,12 +86,27 @@ def _describe(group_id, source, members, rows):
     }
 
 
+def _auto_id(throw_id: str) -> str:
+    return "auto-" + hashlib.sha1(throw_id.encode()).hexdigest()[:12]
+
+
 def with_meta(groups: list[dict], stored: list[dict]) -> list[dict]:
     """Curator titles and review flags, applied on read so labelling never regroups."""
     meta = {v["id"]: v for v in stored}
+    current = {g["id"] for g in groups}
+    # An automatic group is named after its earliest throw, so a later import that adds an
+    # earlier throw renames it. Its label then follows the throw it was first given to.
+    moved = {k: v for k, v in meta.items() if v.get("source") == "auto" and k not in current}
+
+    def label(group):
+        if group["id"] in meta or not moved:
+            return meta.get(group["id"], {})
+        return next((moved[k] for m in group["members"] if (k := _auto_id(m)) in moved), {})
+
     return [
-        {**g, **{k: meta.get(g["id"], {}).get(k, False if k == "reviewed" else "") for k in META}}
+        {**g, **{k: record.get(k, False if k == "reviewed" else "") for k in META}}
         for g in groups
+        for record in [label(g)]
     ]
 
 
@@ -116,9 +134,9 @@ def group(throws: list[dict], stored: list[dict]) -> list[dict]:
     index: dict[tuple, list[int]] = {}
     # Parsed once per throw: the pair checks below run about a million times on a full library.
     todo = sorted((t for t in throws if t["id"] not in assigned), key=_order)
-    features = {t["id"]: _features(t) for t in todo}
+    parsed = {t["id"]: features(t) for t in todo}
     for row in todo:
-        pos = _num(row.get("position"), 2)
+        pos = numbers(row.get("position"), 2)
         cell = None
         if pos:
             cell = (
@@ -129,7 +147,7 @@ def group(throws: list[dict], stored: list[dict]) -> list[dict]:
                 math.floor(pos[1] / ORIGIN_RADIUS),
             )
         home = None
-        mine = features[row["id"]]
+        mine = parsed[row["id"]]
         if cell and mine is not None:
             nearby = sorted(
                 g
@@ -137,7 +155,7 @@ def group(throws: list[dict], stored: list[dict]) -> list[dict]:
                 for dy in (-1, 0, 1)
                 for g in index.get((*cell[:3], cell[3] + dx, cell[4] + dy), ())
             )
-            home = next((g for g in nearby if _same(features[auto[g][0]], mine)), None)
+            home = next((g for g in nearby if _same(parsed[auto[g][0]], mine)), None)
         if home is None:
             auto.append([row["id"]])
             if cell:
@@ -145,6 +163,5 @@ def group(throws: list[dict], stored: list[dict]) -> list[dict]:
         else:
             auto[home].append(row["id"])
     for members in auto:
-        group_id = "auto-" + hashlib.sha1(members[0].encode()).hexdigest()[:12]
-        groups.append(_describe(group_id, "auto", members, rows))
+        groups.append(_describe(_auto_id(members[0]), "auto", members, rows))
     return groups

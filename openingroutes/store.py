@@ -7,7 +7,7 @@ from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
-TABLES = {"matches", "teachings", "plans", "round_reviews", "jobs", "variants", "places"}
+TABLES = {"matches", "teachings", "plans", "round_reviews", "jobs", "variants", "places", "misthrows"}
 
 
 def now():
@@ -58,6 +58,24 @@ def _throw_row(row: dict, match: dict, teachings: dict, overrides: dict) -> dict
     }
 
 
+def _published(teachings: dict) -> set:
+    return {key for key, t in teachings.items() if t.get("status") == "published"}
+
+
+def _mark(rows: list, groups: list, auto: dict, decisions: dict, protected: set):
+    """Give each throw its variant and, where a rule matched or a curator decided, its misthrow state."""
+    from .misthrows import status
+
+    owner = {m: g["id"] for g in groups for m in g["members"]}
+    for row in rows:
+        row["variant_id"] = owner.get(row["id"])
+        state = status(row["id"], auto, decisions, protected)
+        if state:
+            row["misthrow"] = state
+            if state["flagged"]:
+                row["gaps"] = [*row["gaps"], "misthrow"]
+
+
 PREVIEW_POINTS = 12  # enough for the card thumbnail; the full path is fetched with the throw
 
 
@@ -86,6 +104,7 @@ class Store:
                 CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS variants(id TEXT PRIMARY KEY, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS places(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS misthrows(id TEXT PRIMARY KEY, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS revisions(id INTEGER PRIMARY KEY, entity TEXT, data TEXT, at TEXT);
                 PRAGMA user_version=2;
             """)
@@ -209,7 +228,8 @@ class Store:
 
     def catalog(self):
         from .domain import effective_round
-        from .variants import cluster
+        from .misthrows import evaluate
+        from .variants import with_meta
 
         teachings, reviews = self.all("teachings"), self.all("round_reviews")
         overrides = self.place_overrides()
@@ -231,11 +251,11 @@ class Store:
                     entry["formation"] = compact_formation(formations[row["id"]])
                 catalog["rounds"].append(entry)
             catalog["throws"].extend(_throw_row(row, match, teachings, overrides) for row in match["throws"])
-        variants = cluster(catalog["throws"], list(self.all("variants").values()))
-        owner = {m: v["id"] for v in variants for m in v["members"]}
-        for row in catalog["throws"]:
-            row["variant_id"] = owner.get(row["id"])
-        catalog["variants"] = variants
+        stored = list(self.all("variants").values())
+        decisions, protected = self.all("misthrows"), _published(teachings)
+        groups, auto = evaluate(catalog["throws"], stored, decisions, protected)
+        _mark(catalog["throws"], groups, auto, decisions, protected)
+        catalog["variants"] = with_meta(groups, stored)
         catalog.update(self._vocabulary({m["map"] for m in catalog["matches"]}, overrides))
         rounds_by_id = {r["id"]: r for r in catalog["rounds"]}
         analyses = self.ct_patterns(list(self.all("matches").values()), rounds_by_id, catalog["throws"])
@@ -358,10 +378,10 @@ class Store:
                     entry["formation"] = compact_formation(formations[row["id"]])
                 rounds.append(entry)
             throws.extend(_throw_row(row, match, teachings, overrides) for row in match["throws"])
-        variants = self.map_variants(map_name, throws)
-        owner = {m: v["id"] for v in variants for m in v["members"]}
+        decisions, protected = self.all("misthrows"), _published(teachings)
+        variants, auto = self.map_variants(map_name, throws, decisions, protected)
+        _mark(throws, variants, auto, decisions, protected)
         for row in throws:
-            row["variant_id"] = owner.get(row["id"])
             row["trajectory_preview"] = _preview(row.pop("trajectory", None) or [])
         analysis = self._ct_for_map(map_name, reviews)
         if analysis:
@@ -389,10 +409,11 @@ class Store:
             )
         return result.get(map_name)
 
-    def map_variants(self, map_name, throws):
-        """Variant groups for one map, cached on disk on the inputs that change grouping."""
+    def map_variants(self, map_name, throws, decisions, protected):
+        """One map's variant groups and matched misthrow rules, cached on disk on their inputs."""
         import hashlib
 
+        from . import misthrows as M
         from . import variants as V
 
         stored = list(self.all("variants").values())
@@ -407,12 +428,19 @@ class Store:
         # Stored order matters when manual records overlap, so it is kept.
         manual = [(v["id"], v.get("members")) for v in stored if v.get("source") == "manual"]
         thresholds = [V.ORIGIN_RADIUS, V.ORIGIN_DZ, V.EFFECT_RADIUS, V.ANGLE_DEG]
+        rules = [M.RULES_VERSION, M.BOUNCE_RADIUS, M.OUTLIER_RADIUS, M.OUTLIER_MIN_MEMBERS, M.KINDS]
+        ids = {t["id"] for t in throws}
+        decided = sorted((i, d.get("decision")) for i, d in decisions.items() if i in ids)
         key = hashlib.sha256(
-            json.dumps([V.VARIANTS_VERSION, thresholds, map_name, features, manual], sort_keys=True).encode()
+            json.dumps(
+                [V.VARIANTS_VERSION, thresholds, rules, map_name, features, manual, decided]
+                + [sorted(protected & ids)],
+                sort_keys=True,
+            ).encode()
         ).hexdigest()
         memory = Store._variant_cache.get((str(self.db), map_name))
         if memory and memory[0] == key:
-            return V.with_meta(memory[1], stored)
+            return V.with_meta(memory[1], stored), memory[2]
         disk = self.root / "cache" / "variants.json"
         try:
             cached = json.loads(disk.read_text(encoding="utf-8"))
@@ -422,10 +450,10 @@ class Store:
             cached = {}
         entry = cached.get(map_name)
         if isinstance(entry, dict) and entry.get("key") == key:
-            groups = entry["groups"]
+            groups, auto = entry["groups"], entry["auto"]
         else:
-            groups = V.group(throws, stored)
-            cached[map_name] = {"key": key, "groups": groups}
+            groups, auto = M.evaluate(throws, stored, decisions, protected)
+            cached[map_name] = {"key": key, "groups": groups, "auto": auto}
             try:
                 disk.parent.mkdir(exist_ok=True)
                 tmp = disk.with_suffix(".tmp")
@@ -433,8 +461,8 @@ class Store:
                 tmp.replace(disk)
             except OSError:
                 pass
-        Store._variant_cache[(str(self.db), map_name)] = (key, groups)
-        return V.with_meta(groups, stored)
+        Store._variant_cache[(str(self.db), map_name)] = (key, groups, auto)
+        return V.with_meta(groups, stored), auto
 
     def locate(self, throw_id):
         """The raw throw and its match; reads one match when the id starts with its match id."""
@@ -467,6 +495,7 @@ class Store:
         row = _throw_row(raw, match, self.all("teachings"), self.place_overrides())
         light = next((t for t in self.map_slice(match["map"])["throws"] if t["id"] == throw_id), {})
         row["variant_id"] = light.get("variant_id")
+        row.update({k: light[k] for k in ("misthrow", "gaps") if k in light})
         return row
 
     def throws_by_id(self, ids):

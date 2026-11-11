@@ -63,6 +63,13 @@ class PlaceLabel(BaseModel):
     area: Literal["A", "B", "Mid", "CT", "other"] | None = None
 
 
+class MisthrowDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    decision: Literal["misthrow", "keep"]
+    note: str = Field(default="", max_length=2000)
+    reviewer: str = Field(default="", max_length=100)
+
+
 class Step(BaseModel):
     model_config = ConfigDict(extra="forbid")
     throw_id: str = Field(pattern=ID)
@@ -187,6 +194,37 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
         if len(wanted) > 200 or any(not re.fullmatch(ID, i) for i in wanted):
             raise HTTPException(422, "Give at most 200 valid throw ids")
         return encoded(store.throws_by_id(wanted))
+
+    def misthrow_state(throw_id):
+        row = store.throws_by_id([throw_id])
+        return row[0].get("misthrow") if row else None
+
+    @app.put("/api/throws/{throw_id}/misthrow")
+    def decide_misthrow(throw_id: str, body: MisthrowDecision):
+        if not re.fullmatch(ID, throw_id):
+            raise HTTPException(422, "Invalid throw")
+        if store.locate(throw_id)[0] is None:
+            raise HTTPException(404, "Throw not found")
+        if body.decision == "misthrow":
+            # Hiding the throw would silently drop its lesson, or a plan built on it, from exports.
+            published = store.all("teachings").get(throw_id, {}).get("status") == "published" or any(
+                plan.get("status") == "published"
+                and any(step["throw_id"] == throw_id for step in plan.get("steps", []))
+                for plan in store.all("plans").values()
+            )
+            if published:
+                raise HTTPException(409, "Withdraw the published lesson or plan that uses this throw first")
+        store.put("misthrows", throw_id, {**body.model_dump(), "at": now()})
+        return misthrow_state(throw_id)
+
+    @app.delete("/api/throws/{throw_id}/misthrow")
+    def clear_misthrow(throw_id: str):
+        if not re.fullmatch(ID, throw_id):
+            raise HTTPException(422, "Invalid throw")
+        if throw_id not in store.all("misthrows"):
+            raise HTTPException(404, "No decision recorded for this throw")
+        store.delete("misthrows", throw_id)
+        return misthrow_state(throw_id)
 
     @app.get("/api/timelines/{round_id}")
     def timeline(round_id: str):
@@ -336,6 +374,8 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
         ):
             data["reproduction"] = "pending"
         gaps = teaching_gaps(data, source_verified=match["source"]["verified"])
+        if (misthrow_state(throw_id) or {}).get("flagged"):
+            gaps.append("misthrow")
         for key in ("stance_image", "aim_image", "pro_video", "recreation_video"):
             asset = data.get(key, "")
             if asset.startswith("media/") and not (root / asset).is_file():

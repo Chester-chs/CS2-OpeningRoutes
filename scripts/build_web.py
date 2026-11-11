@@ -39,6 +39,8 @@ def main():
         # Local preview includes observed facts only, never private teaching drafts or personal notes.
         for row in catalog["throws"]:
             row["teaching"] = {}
+            if "misthrow" in row:
+                row["misthrow"] = {**row["misthrow"], "note": "", "reviewer": ""}
         catalog["plans"] = []
         for row in catalog["rounds"]:
             row["review"] = {}

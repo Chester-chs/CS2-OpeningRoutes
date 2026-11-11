@@ -92,6 +92,19 @@ def test_malformed_throws_never_join_a_lineup():
     assert sorted(len(g["members"]) for g in groups) == [1] * 8
 
 
+def test_auto_variant_label_follows_its_throw_when_an_earlier_throw_joins():
+    rows = [throw("t5", "Alice"), throw("t6", "Bob", pos=(10, 0, 0))]
+    first = cluster(rows, [])[0]
+    label = {"id": first["id"], "source": "auto", "title": "窗口烟", "reviewed": True, "reviewer": "me"}
+    # a later import adds an earlier throw of the same lineup, which renames the automatic group
+    grown = cluster([throw("t1", "Carol", pos=(5, 0, 0)), *rows], [label])
+    assert len(grown) == 1 and grown[0]["id"] != first["id"]
+    assert grown[0]["title"] == "窗口烟" and grown[0]["reviewed"] is True
+    # a label given to the group under its current name wins
+    current = {"id": grown[0]["id"], "source": "auto", "title": "新名称"}
+    assert cluster([throw("t1", "Carol", pos=(5, 0, 0)), *rows], [label, current])[0]["title"] == "新名称"
+
+
 def test_manual_variants_override_auto_clustering():
     rows = [throw("t1", "Alice"), throw("t2", "Bob", pos=(10, 0, 0)), throw("t3", "Carol", pos=(20, 0, 0))]
     manual = [{"id": "v-manual", "source": "manual", "members": ["t3", "missing"], "title": "X"}]

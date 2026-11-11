@@ -14,12 +14,18 @@ from .store import Store, now
 def export_bundle(store: Store, output: Path, *, include_pistols: bool = False) -> Path:
     catalog = store.catalog()
     verified = {m["id"] for m in catalog["matches"] if m["source"]["verified"]}
+
+    def misthrow(t):
+        return (t.get("misthrow") or {}).get("flagged")
+
+    # The curator's misthrow notes stay in the studio.
     throws = [
-        t
+        {k: v for k, v in t.items() if k != "misthrow"}
         for t in catalog["throws"]
         if t["match_id"] in verified
         and t["teaching"].get("status") == "published"
         and not teaching_gaps(t["teaching"], source_verified=True)
+        and not misthrow(t)
     ]
     excluded = {r["id"] for r in catalog["rounds"] if r.get("excluded")}
     throws = [t for t in throws if t["round_id"] not in excluded]
@@ -45,9 +51,9 @@ def export_bundle(store: Store, output: Path, *, include_pistols: bool = False) 
     events: dict[str, list] = {key: [] for key in round_ids}
     for t in catalog["throws"]:
         if t["round_id"] in events:
-            events[t["round_id"]].append(
-                {k: t[k] for k in ("id", "tick", "player_id", "player", "kind", "side") if k in t}
-            )
+            event = {k: t[k] for k in ("id", "tick", "player_id", "player", "kind", "side") if k in t}
+            # Still shown on the round timeline, labelled as a misthrow.
+            events[t["round_id"]].append({**event, "misthrow": True} if misthrow(t) else event)
     rounds = [
         {
             **r,
