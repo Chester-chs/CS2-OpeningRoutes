@@ -26,8 +26,9 @@ def sources(path, names, **changes):
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=batch.CSV_FIELDS)
         writer.writeheader()
-        for name in names:
-            writer.writerow({"archive": name, **SOURCE, **changes})
+        for index, name in enumerate(sorted(names)):
+            writer.writerow({"archive": name, **SOURCE,
+                             "url": SOURCE["url"].replace("2390000", str(2390000 + index)), **changes})
     return path
 
 
@@ -169,7 +170,8 @@ def test_actual_map_must_match_filename_before_library_write(setup, monkeypatch)
 
 def test_parser_failure_continues_and_retries_on_next_run(setup, monkeypatch):
     folder, _, _, calls = setup
-    archive(folder, members={"bad-mirage.dem": b"bad", "good-mirage.dem": b"good"})
+    archive(folder, "bad.zip", {"bad-mirage.dem": b"bad"})
+    archive(folder, "good.zip", {"good-mirage.dem": b"good"})
     real = batch.extract_demo
 
     def fail_once(path, *args, **kwargs):
@@ -182,6 +184,13 @@ def test_parser_failure_continues_and_retries_on_next_run(setup, monkeypatch):
     monkeypatch.setattr(batch, "extract_demo", real)
     assert [r["status"] for r in run(setup)] == ["imported", "duplicate"]
     assert len(calls) == 2
+
+
+def test_same_series_map_with_different_hash_needs_review(setup):
+    folder, _, _, calls = setup
+    archive(folder, members={"m1-mirage.dem": b"first", "alternate-mirage.dem": b"other"})
+    assert [r["status"] for r in run(setup)] == ["imported", "pending_match_map"]
+    assert len(calls) == 1
 
 
 def test_rar_listing_parses_chinese_and_rejects_links():
