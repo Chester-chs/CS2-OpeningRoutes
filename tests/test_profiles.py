@@ -191,3 +191,9 @@ def test_t_formation_analysis_has_its_own_clock_and_labels():
     assert result["side"] == "T"
     assert result["snapshot_seconds"] == [0, 5, 10, 15, 20, 25, 30]
     assert result["rounds"] == 0
+
+
+def test_learning_events_do_not_inflate_the_legacy_startup_payload(tmp_path):
+    store = seed_learning(tmp_path)
+    assert "learning_events" not in store.summary()["rounds"][0]
+    assert "learning_events" not in store.catalog()["rounds"][0]
