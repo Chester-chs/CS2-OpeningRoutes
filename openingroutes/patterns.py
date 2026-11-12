@@ -18,7 +18,7 @@ from collections import Counter, defaultdict
 import numpy as np
 
 from . import stats
-from .formations import SNAPSHOT_SECONDS
+from .formations import SNAPSHOT_SECONDS, T_SNAPSHOT_SECONDS
 
 AREAS = ("A", "B", "Mid", "CT", "other")
 ANALYSIS_VERSION = 1
@@ -267,7 +267,12 @@ def analyze_map(
     *,
     max_k: int = 8,
     min_cluster: int = 3,
+    side: str = "CT",
 ) -> dict:
+    if side == "T":
+        return analyze_t(map_name, formations, overrides, max_k=max_k, min_cluster=min_cluster)
+    if side != "CT":
+        raise ValueError("Side must be CT or T")
     usable = _usable(formations)
     n = len(usable)
     result = {
@@ -377,6 +382,81 @@ def analyze_map(
         spots = learn_spots(usable)
         result["spots"] = spots["spots"]
         result["team_habits"] = team_habits(usable, labels, k, spots, throws, map_name, overrides)
+    return result
+
+
+def analyze_t(map_name, formations, overrides=None, *, max_k=8, min_cluster=3):
+    """Reuse count clustering for offensive expansion; no defensive names or CT time grid."""
+    areas = (*AREAS, "T")
+    usable, features, counts = [], [], []
+    for formation in formations:
+        snapshots = {s["second"]: s for s in formation.get("t_snapshots", [])}
+        if any(second not in snapshots or len(snapshots[second]["t"]) != 5 for second in T_SNAPSHOT_SECONDS):
+            continue
+        values = []
+        for second in T_SNAPSHOT_SECONDS:
+            c = Counter()
+            for player in snapshots[second]["t"]:
+                if player.get("alive"):
+                    place = player.get("place")
+                    c["T" if place in ("TSpawn", "TStart") else macro_area(map_name, place, overrides)] += 1
+            values.append(c)
+        features.append([c.get(a, 0) for c in values for a in areas])
+        counts.append(values)
+        usable.append(formation)
+    n = len(usable)
+    result = {
+        "map": map_name,
+        "side": "T",
+        "method": "opening-count-clustering",
+        "snapshot_seconds": list(T_SNAPSHOT_SECONDS),
+        "rounds": n,
+        "excluded_rounds": len(formations) - n,
+        "patterns": [],
+        "warnings": [],
+        "assignments": {},
+    }
+    if n < 2 * min_cluster:
+        result["warnings"].append("样本不足，或缺少完整的 0–30 秒 T 方快照。")
+        return result
+    x = np.asarray(features, dtype=float)
+    best, _ = stats.select_k(x, range(2, min(max_k, n // min_cluster) + 1), min_size=min_cluster)
+    if best is None:
+        result["warnings"].append("展开分布不足以区分多个阵型。")
+        return result
+    for cluster in range(best["k"]):
+        ids = [i for i, value in enumerate(best["labels"]) if value == cluster]
+        members = [usable[i] for i in ids]
+        result["patterns"].append(
+            {
+                "id": cluster,
+                "name": f"T 展开 {cluster + 1}（待人工命名）",
+                "rounds": len(members),
+                "representative": members[0]["round_id"],
+                "round_ids": [f["round_id"] for f in members],
+                "shares": {
+                    second: {
+                        a: round(sum(counts[i][j].get(a, 0) for i in ids) / (5 * len(ids)), 3) for a in areas
+                    }
+                    for j, second in enumerate(T_SNAPSHOT_SECONDS)
+                },
+                "economy": dict(
+                    Counter(f.get("opening_context", {}).get("t_econ", "unknown") for f in members)
+                ),
+                "score": dict(
+                    Counter(
+                        "leading"
+                        if f["context"].get("t_score_before", 0) > f["context"].get("ct_score_before", 0)
+                        else "trailing"
+                        if f["context"].get("t_score_before", 0) < f["context"].get("ct_score_before", 0)
+                        else "tied"
+                        for f in members
+                    )
+                ),
+                "wins": sum(f.get("winner") == "T" for f in members),
+            }
+        )
+        result["assignments"].update({f["round_id"]: cluster for f in members})
     return result
 
 

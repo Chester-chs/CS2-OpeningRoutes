@@ -1,13 +1,26 @@
 """Transactional metadata; dense timelines live in separate per-round files."""
 
 import gzip
+import hashlib
 import json
+import re
 import sqlite3
+import threading
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
-TABLES = {"matches", "teachings", "plans", "round_reviews", "jobs", "variants", "places", "misthrows"}
+TABLES = {
+    "matches",
+    "teachings",
+    "plans",
+    "round_reviews",
+    "jobs",
+    "variants",
+    "places",
+    "misthrows",
+    "learning_groups",
+}
 
 
 def now():
@@ -113,6 +126,7 @@ class Store:
                 CREATE TABLE IF NOT EXISTS variants(id TEXT PRIMARY KEY, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS places(id TEXT PRIMARY KEY, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS misthrows(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS learning_groups(id TEXT PRIMARY KEY, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS revisions(id INTEGER PRIMARY KEY, entity TEXT, data TEXT, at TEXT);
                 PRAGMA user_version=2;
             """)
@@ -255,6 +269,7 @@ class Store:
             formations = match.get("formations") or {}
             for row in match["rounds"]:
                 entry = effective_round(row, reviews.get(row["id"], {}))
+                entry.pop("learning_events", None)
                 if row["id"] in formations:
                     entry["formation"] = compact_formation(formations[row["id"]])
                 catalog["rounds"].append(entry)
@@ -327,7 +342,13 @@ class Store:
     def _all_rounds(light, reviews):
         from .domain import effective_round
 
-        return [effective_round(row, reviews.get(row["id"], {})) for _, rounds, _ in light for row in rounds]
+        return [
+            effective_round(
+                {k: v for k, v in row.items() if k != "learning_events"}, reviews.get(row["id"], {})
+            )
+            for _, rounds, _ in light
+            for row in rounds
+        ]
 
     def summary(self):
         """Everything but throws, variants and formations: what the studio needs to open."""
@@ -383,6 +404,7 @@ class Store:
             formations = match.get("formations") or {}
             for row in match["rounds"]:
                 entry = effective_round(row, reviews.get(row["id"], {}))
+                entry.pop("learning_events", None)
                 if row["id"] in formations:
                     entry["formation"] = compact_formation(formations[row["id"]])
                 rounds.append(entry)
@@ -530,3 +552,160 @@ class Store:
         with gzip.open(destination.with_suffix(".tmp"), "wt", encoding="utf-8") as f:
             json.dump(data, f, allow_nan=False, separators=(",", ":"))
         destination.with_suffix(".tmp").replace(destination)
+
+    _learning_guard = threading.RLock()
+    _learning_threads: dict = {}
+    _learning_locks: dict = {}
+    _learning_memory: dict = {}
+    _learning_details: dict = {}
+    _learning_errors: dict = {}
+
+    def _profile_key(self):
+        from .profiles import HOLD_SECONDS, PROFILE_VERSION, WINDOW_SECONDS
+
+        def build_key():
+            with closing(self.connect()) as c:
+                sources = c.execute(
+                    "SELECT matches.id,json_extract(data,'$.sha256'),json_extract(data,'$.game_version'),"
+                    "json_extract(data,'$.learning_version'),json_extract(data,'$.formations_version'),"
+                    "json_extract(data,'$.source'),json_extract(data,'$.team_aliases'),"
+                    "(SELECT MAX(revisions.id) FROM revisions WHERE entity=matches.id) "
+                    "FROM matches ORDER BY matches.id"
+                ).fetchall()
+            inputs = [
+                PROFILE_VERSION,
+                HOLD_SECONDS,
+                WINDOW_SECONDS,
+                sources,
+                self.all("round_reviews"),
+                self.all("places"),
+                self.all("learning_groups"),
+            ]
+            return hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
+
+        return self._memoized("learning-key", build_key)
+
+    def _learning_disk(self, key, profile_id, map_name):
+        shard = hashlib.sha256(map_name.encode()).hexdigest()[:12]
+        return self.root / "cache" / "learning" / key / shard / f"{profile_id}.json.gz"
+
+    def _read_learning_index(self, key):
+        root = str(self.db.resolve())
+        cached = self._learning_memory.get(root)
+        if cached and cached[0] == key:
+            return cached[1]
+        try:
+            saved = json.loads((self.root / "cache/player_areas.json").read_text(encoding="utf-8"))
+            if saved["key"] == key:
+                self._learning_memory[root] = (key, saved["index"])
+                return saved["index"]
+        except (OSError, ValueError, KeyError):
+            pass
+        return None
+
+    def _build_learning(self):
+        from .profiles import build
+
+        root = str(self.db.resolve())
+        with self._learning_guard:
+            lock = self._learning_locks.setdefault(root, threading.Lock())
+        with lock:
+            key = self._profile_key()
+            ready = self._read_learning_index(key)
+            if ready is not None:
+                return ready
+            result = build(
+                list(self.all("matches").values()),
+                self.timeline,
+                reviews=self.all("round_reviews"),
+                overrides=self.place_overrides("area"),
+                labels=self.place_overrides(),
+                groups=self.all("learning_groups"),
+            )
+            for pid, profile in result["profiles"].items():
+                path = self._learning_disk(key, pid, profile["map"])
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with gzip.open(path.with_suffix(".tmp"), "wt", encoding="utf-8") as handle:
+                    json.dump(profile, handle, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+                path.with_suffix(".tmp").replace(path)
+            index_file = self.root / "cache/player_areas.json"
+            index_file.parent.mkdir(parents=True, exist_ok=True)
+            index_file.with_suffix(".tmp").write_text(
+                json.dumps({"key": key, "index": result["index"]}, ensure_ascii=False, allow_nan=False),
+                encoding="utf-8",
+            )
+            index_file.with_suffix(".tmp").replace(index_file)
+            # An import/review may have changed the inputs while the background task ran.
+            # Never serve stale statistics, especially after source verification is withdrawn.
+            if self._profile_key() != key:
+                return {
+                    "schema_version": 1,
+                    "state": "building",
+                    "profiles": [],
+                    "coverage": {},
+                    "regions": {},
+                    "groups": {},
+                }
+            self._learning_memory[root] = (key, result["index"])
+            self._learning_errors.pop(root, None)
+            return result["index"]
+
+    def learning_index(self, *, wait=False):
+        key = self._profile_key()
+        ready = self._read_learning_index(key)
+        if ready is not None:
+            return ready
+        if wait:
+            return self._build_learning()
+        root = str(self.db.resolve())
+        with self._learning_guard:
+            thread = self._learning_threads.get(root)
+            if not thread or not thread.is_alive():
+                if self._learning_errors.get(root) == key:
+                    return {
+                        "schema_version": 1,
+                        "state": "error",
+                        "profiles": [],
+                        "coverage": {},
+                        "regions": {},
+                        "groups": {},
+                    }
+
+                def run():
+                    try:
+                        self._build_learning()
+                    except Exception as exc:
+                        self._learning_errors[root] = key
+                        (self.root / "logs/learning-error.log").write_text(str(exc), encoding="utf-8")
+
+                thread = threading.Thread(target=run, name="learning-profiles", daemon=True)
+                self._learning_threads[root] = thread
+                thread.start()
+        return {
+            "schema_version": 1,
+            "state": "building",
+            "profiles": [],
+            "coverage": {},
+            "regions": {},
+            "groups": {},
+        }
+
+    def learning_profile(self, profile_id):
+        if not re.fullmatch(r"[a-f0-9]{24}", profile_id):
+            return None
+        index = self.learning_index()
+        row = next((p for p in index["profiles"] if p["id"] == profile_id), None)
+        if row is None:
+            return None
+        key = self._profile_key()
+        memory_key = (str(self.db.resolve()), key, profile_id)
+        if memory_key not in self._learning_details:
+            try:
+                with gzip.open(self._learning_disk(key, profile_id, row["map"]), "rt", encoding="utf-8") as f:
+                    result = json.load(f)
+            except (OSError, ValueError):
+                return None
+            if len(self._learning_details) >= 48:
+                self._learning_details.pop(next(iter(self._learning_details)))
+            self._learning_details[memory_key] = result
+        return self._learning_details[memory_key]

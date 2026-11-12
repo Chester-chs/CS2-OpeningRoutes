@@ -7,6 +7,7 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+from datetime import date
 from pathlib import Path
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
@@ -92,6 +93,25 @@ class Plan(BaseModel):
     status: str = Field(default="draft", pattern=r"^(draft|published|withdrawn)$")
 
 
+class LearningGroup(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    kind: Literal["region", "role"]
+    map: str = Field(pattern=MAP)
+    label: str = Field(min_length=1, max_length=60)
+    places: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(
+        default_factory=list, max_length=128
+    )
+    players: list[Annotated[str, Field(pattern=r"^[0-9]{1,20}$")]] = Field(
+        default_factory=list, max_length=50
+    )
+    side: Literal["CT", "T"] | None = None
+    area: str = Field(default="", max_length=150)
+    team: str = Field(default="", max_length=100)
+    confirmed: bool = False
+    date_from: date | None = None
+    date_to: date | None = None
+
+
 def create_app(root: Path, *, testing=False, web_root: Path | None = None):
     root = Path(root).resolve()
     store = Store(root)
@@ -169,6 +189,48 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
     @app.get("/api/catalog/summary")
     def catalog_summary():
         return encoded(store.summary())
+
+    @app.get("/api/learning")
+    def learning_index():
+        return encoded(store.learning_index())
+
+    @app.get("/api/learning/profiles/{profile_id}")
+    def learning_profile(profile_id: str):
+        profile = store.learning_profile(profile_id)
+        if profile is None:
+            raise HTTPException(404, "Profile unavailable; refresh the learning index")
+        return encoded(profile)
+
+    @app.post("/api/learning/retry")
+    def retry_learning():
+        store._learning_errors.pop(str(store.db.resolve()), None)
+        return encoded(store.learning_index())
+
+    @app.put("/api/learning/groups/{group_id}")
+    def save_learning_group(group_id: str, group: LearningGroup):
+        from .profiles import AREA_LABELS, _regions
+
+        if not re.fullmatch(ID, group_id) or group_id in AREA_LABELS:
+            raise HTTPException(422, "Invalid group ID")
+        if group.date_from and group.date_to and group.date_from > group.date_to:
+            raise HTTPException(422, "Invalid date range")
+        if group.kind == "region":
+            if not group.places or any(not valid_place(group.map, p) for p in group.places):
+                raise HTTPException(422, "A region needs valid demo callouts")
+        else:
+            regions = _regions(group.map, store.place_overrides("area"), store.all("learning_groups"))
+            if not group.players or not group.side or not group.team or group.area not in regions:
+                raise HTTPException(422, "A role needs players, team, side and an existing region")
+        value = group.model_dump(mode="json")
+        store.put("learning_groups", group_id, value)
+        return {"id": group_id, **value}
+
+    @app.delete("/api/learning/groups/{group_id}")
+    def delete_learning_group(group_id: str):
+        if not re.fullmatch(ID, group_id):
+            raise HTTPException(422, "Invalid group ID")
+        store.delete("learning_groups", group_id)
+        return {"removed": group_id}
 
     @app.get("/api/catalog/maps/{map_name}")
     def catalog_map(map_name: str):
