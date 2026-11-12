@@ -206,3 +206,43 @@ def test_loose_demo_is_supported_without_moving_original(setup):
     demo.write_bytes(b"loose")
     assert run(setup)[0]["status"] == "imported"
     assert calls == [demo] and demo.read_bytes() == b"loose"
+
+
+def test_duplicate_preserves_existing_source_and_does_not_write_library(setup):
+    folder, data, work, calls = setup
+    demo = folder / "match-mirage.dem"
+    demo.write_bytes(b"existing")
+    digest = hashlib.sha256(b"existing").hexdigest()
+    store = Store(data)
+    old = {"id": digest[:20], "sha256": digest, "map": "de_mirage",
+           "source": {**SOURCE, "verified": False}}
+    store.save_match(old)
+    assert run(setup)[0]["status"] == "duplicate"
+    assert store.all("matches")[digest[:20]] == old
+    assert not calls and not (work / "backups").exists()
+
+
+def test_demo_preflight_rejects_invalid_magic_before_parser(tmp_path, monkeypatch):
+    demo = tmp_path / "bad.dem"
+    demo.write_bytes(b"garbage")
+    monkeypatch.setattr(batch, "DemoParser", lambda *args: pytest.fail("Invalid magic reached parser"))
+    with pytest.raises(ValueError, match="PBDEMS2"):
+        batch.demo_map(demo)
+
+
+def test_truncated_resume_receipt_is_recoverable(setup):
+    folder, _, work, calls = setup
+    archive(folder)
+    run(setup)
+    receipt = next((work / "staging").glob("*/ready.json"))
+    receipt.write_text('{"interrupted":', encoding="utf-8")
+    assert run(setup)[0]["status"] == "duplicate"
+    assert len(calls) == 1 and calls[0].exists()
+
+
+def test_loose_demo_size_limit_precedes_parsing(setup, monkeypatch):
+    folder, _, _, calls = setup
+    (folder / "large-mirage.dem").write_bytes(b"too large")
+    monkeypatch.setattr(batch, "MAX_MEMBER_BYTES", 4)
+    assert run(setup)[0]["status"] == "error"
+    assert not calls
