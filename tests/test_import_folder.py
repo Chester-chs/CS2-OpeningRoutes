@@ -275,8 +275,14 @@ def test_backup_target_cannot_be_inside_its_library(tmp_path):
 def test_existing_match_urls_with_tracking_still_prevent_double_counting(setup):
     folder, data, _, calls = setup
     store = Store(data)
-    store.save_match({"id": "existing", "sha256": "old", "map": "de_mirage",
-                      "source": {"url": SOURCE["url"] + "?utm_source=share#overview"}})
+    store.save_match(
+        {
+            "id": "existing",
+            "sha256": "old",
+            "map": "de_mirage",
+            "source": {"url": SOURCE["url"] + "?utm_source=share#overview"},
+        }
+    )
     archive(folder)
     assert run(setup)[0]["status"] == "pending_match_map"
     assert not calls

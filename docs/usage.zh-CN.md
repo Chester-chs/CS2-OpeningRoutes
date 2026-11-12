@@ -113,6 +113,27 @@ uv run python scripts/build_web.py --data .local/data --local-preview
 uv run python -m http.server 8766 --bind 127.0.0.1 --directory artifacts/web-preview
 ```
 
+## 批量导入职业 Demo
+
+命令在仓库根目录运行。先生成来源表，每个 RAR、ZIP 或独立 DEM 一行；文件名只能提供赛事、对阵的候选文字，日期和来源仍需核对。
+
+```powershell
+$env:PYTHONUTF8 = "1"
+.venv\Scripts\python.exe scripts\import_folder.py "C:\path\to\demos" --template .local\learning-data\sources.csv
+```
+
+填写 CSV 的 `event`、`match`、`date`（YYYY-MM-DD）、`url`（HLTV 比赛页）和 `reviewer`。本人核对后才将该行 `reviewed` 改为 `true`；模板不会覆盖已有表格。未核对或来源不完整的行会保留为 `pending_source`，不入库。下载新包后可生成另一份模板，保留已经填写的表格。
+
+关闭正在写入同一资料库的软件或导入任务，再按明确的地图白名单导入：
+
+```powershell
+.venv\Scripts\python.exe scripts\import_folder.py "C:\path\to\demos" --sources .local\learning-data\sources.csv --maps mirage --data .local\data --work .local\learning-data
+```
+
+脚本复用桌面端提取流程，先用 SQLite backup 和 timelines 副本备份，再首次写库。原始压缩包和 Demo 保留；解压文件也保存在工作目录的 `staging`，不会自动删除，需预留磁盘空间。RAR 使用系统 `tar`（已验证 Windows bsdtar）；ZIP 使用 Python 自带支持。单个文件上限 2 GiB，单包展开上限 20 GiB，暂存时至少保留 1 GiB 空闲空间。
+
+`results.jsonl` 逐文件记录状态、SHA-256、耗时和错误。再次运行会复核暂存文件并按数据库 SHA 去重，失败文件可重试；旧日志不会代替入库结果。重复文件保留原来源与人工内容，不自动补事实或提升审核状态。`pending_split` 表示分段 Demo，`pending_match_map` 表示同一 HLTV 比赛同地图已有另一份录制，均须人工核对，不能计成新场次。文件名未知地图显示 `unknown_map`；通过白名单的文件还会核对实际 Demo 地图。
+
 ## 当前边界
 
 - 覆盖范围取决于自己的导入库。当前本地基准涵盖 Mirage、Ancient、Dust2 的 80 场比赛地图，其中有 21 个回合因缺少本地原 Demo 无法补充新版区域资料；实际档案页会显示覆盖和缺失数。分发包仅附较小样本，不能代表全量库。
