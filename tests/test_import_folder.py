@@ -11,7 +11,6 @@ import pytest
 from openingroutes.store import Store
 from scripts import import_folder as batch
 
-
 SOURCE = {
     "event": "Test event",
     "match": "Alpha vs Beta",
@@ -27,8 +26,14 @@ def sources(path, names, **changes):
         writer = csv.DictWriter(handle, fieldnames=batch.CSV_FIELDS)
         writer.writeheader()
         for index, name in enumerate(sorted(names)):
-            writer.writerow({"archive": name, **SOURCE,
-                             "url": SOURCE["url"].replace("2390000", str(2390000 + index)), **changes})
+            writer.writerow(
+                {
+                    "archive": name,
+                    **SOURCE,
+                    "url": SOURCE["url"].replace("2390000", str(2390000 + index)),
+                    **changes,
+                }
+            )
     return path
 
 
@@ -78,11 +83,18 @@ def test_template_is_reviewable_and_never_overwrites_edits(tmp_path):
         batch.write_template(tmp_path, target)
 
 
-@pytest.mark.parametrize("changes", [
-    {"reviewed": "false"}, {"url": ""}, {"reviewer": ""}, {"reviewed": "yes-ish"},
-    {"url": "https://www.hltv.org.evil.test/matches/123/name"},
-    {"url": "https://www.hltv.org/news/123/name"}, {"date": "2026-02-30"},
-])
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"reviewed": "false"},
+        {"url": ""},
+        {"reviewer": ""},
+        {"reviewed": "yes-ish"},
+        {"url": "https://www.hltv.org.evil.test/matches/123/name"},
+        {"url": "https://www.hltv.org/news/123/name"},
+        {"date": "2026-02-30"},
+    ],
+)
 def test_unreviewed_or_invalid_sources_never_open_store(setup, changes):
     folder, data, _, calls = setup
     archive(folder)
@@ -132,10 +144,15 @@ def test_backup_failure_prevents_import(setup, monkeypatch):
 
 def test_split_maps_unknown_maps_and_whitelist_never_import(setup):
     folder, data, _, calls = setup
-    archive(folder, members={
-        "m1-mirage-p1.dem": b"a", "m1-mirage-p2.dem": b"b",
-        "m2-nuke.dem": b"c", "unknown.dem": b"d",
-    })
+    archive(
+        folder,
+        members={
+            "m1-mirage-p1.dem": b"a",
+            "m1-mirage-p2.dem": b"b",
+            "m2-nuke.dem": b"c",
+            "unknown.dem": b"d",
+        },
+    )
     rows = run(setup)
     assert [r["status"] for r in rows] == ["pending_split", "pending_split", "filtered", "unknown_map"]
     assert not calls and not data.exists()
@@ -214,8 +231,7 @@ def test_duplicate_preserves_existing_source_and_does_not_write_library(setup):
     demo.write_bytes(b"existing")
     digest = hashlib.sha256(b"existing").hexdigest()
     store = Store(data)
-    old = {"id": digest[:20], "sha256": digest, "map": "de_mirage",
-           "source": {**SOURCE, "verified": False}}
+    old = {"id": digest[:20], "sha256": digest, "map": "de_mirage", "source": {**SOURCE, "verified": False}}
     store.save_match(old)
     assert run(setup)[0]["status"] == "duplicate"
     assert store.all("matches")[digest[:20]] == old
@@ -245,4 +261,22 @@ def test_loose_demo_size_limit_precedes_parsing(setup, monkeypatch):
     (folder / "large-mirage.dem").write_bytes(b"too large")
     monkeypatch.setattr(batch, "MAX_MEMBER_BYTES", 4)
     assert run(setup)[0]["status"] == "error"
+    assert not calls
+
+
+def test_backup_target_cannot_be_inside_its_library(tmp_path):
+    data = tmp_path / "data"
+    work = data / "timelines" / "work"
+    with pytest.raises(ValueError, match="outside"):
+        batch.backup_library(data, work)
+    assert not data.exists()
+
+
+def test_existing_match_urls_with_tracking_still_prevent_double_counting(setup):
+    folder, data, _, calls = setup
+    store = Store(data)
+    store.save_match({"id": "existing", "sha256": "old", "map": "de_mirage",
+                      "source": {"url": SOURCE["url"] + "?utm_source=share#overview"}})
+    archive(folder)
+    assert run(setup)[0]["status"] == "pending_match_map"
     assert not calls
