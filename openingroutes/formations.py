@@ -10,12 +10,13 @@ curator's corrections take effect without re-importing demos.
 import pandas as pd
 
 SNAPSHOT_SECONDS = (10, 12, 15, 18, 20)
-FORMATIONS_VERSION = 1
+T_SNAPSHOT_SECONDS = (0, 5, 10, 15, 20, 25, 30)
+FORMATIONS_VERSION = 2
 FIELDS = ["X", "Y", "Z", "last_place_name", "health", "current_equip_value", "team_num", "is_alive"]
 
 
 def _records(frame):
-    return frame.to_dict(orient="records")
+    return frame.to_dict(orient="records") if hasattr(frame, "to_dict") else list(frame or [])
 
 
 def _side(team_num):
@@ -48,10 +49,11 @@ def plant_sites(parser) -> dict[int, str]:
 
 
 def extract_formations(parser, rounds: list[dict], tick_rate: float) -> dict[str, dict]:
+    seconds = sorted(set(SNAPSHOT_SECONDS) | set(T_SNAPSHOT_SECONDS))
     targets = {}
     for r in rounds:
         end = r.get("end_tick")
-        for second in SNAPSHOT_SECONDS:
+        for second in seconds:
             tick = int(round(r["freeze_end_tick"] + second * tick_rate))
             if end is None or tick < end:
                 targets[tick] = (r["id"], second)
@@ -66,9 +68,13 @@ def extract_formations(parser, rounds: list[dict], tick_rate: float) -> dict[str
     previous = None
     for r in sorted(rounds, key=lambda x: x["number"]):
         snapshots = []
+        t_snapshots = []
+        opening_context = {}
         teams = {e.get("side"): e.get("team") for e in r.get("equipment", [])}
-        for second in SNAPSHOT_SECONDS:
+        for second in seconds:
             tick = int(round(r["freeze_end_tick"] + second * tick_rate))
+            if r.get("end_tick") is not None and tick >= r["end_tick"]:
+                continue
             group = by_tick.get(tick)
             if group is None:
                 continue
@@ -90,16 +96,31 @@ def extract_formations(parser, rounds: list[dict], tick_rate: float) -> dict[str
                         "equip": int(row.get("current_equip_value") or 0),
                     }
                 )
-            snapshots.append(
-                {
-                    "second": second,
-                    "tick": tick,
-                    "ct": sorted(players["CT"], key=lambda p: p["player_id"]),
-                    "t_areas_place": [p["place"] for p in players["T"]],
-                    "ct_equip": sum(p["equip"] for p in players["CT"]),
-                    "t_equip": sum(p["equip"] for p in players["T"]),
+            snapshot = {
+                "second": second,
+                "tick": tick,
+                "ct": sorted(players["CT"], key=lambda p: p["player_id"]),
+                "t_areas_place": [p["place"] for p in players["T"]],
+                "ct_equip": sum(p["equip"] for p in players["CT"]),
+                "t_equip": sum(p["equip"] for p in players["T"]),
+            }
+            if second in SNAPSHOT_SECONDS:
+                snapshots.append(snapshot)
+            if second in T_SNAPSHOT_SECONDS:
+                t_snapshots.append(
+                    {
+                        "second": second,
+                        "tick": tick,
+                        "t": sorted(players["T"], key=lambda p: p["player_id"]),
+                    }
+                )
+            if second == 0:
+                opening_context = {
+                    "ct_equip": snapshot["ct_equip"],
+                    "t_equip": snapshot["t_equip"],
+                    "ct_econ": economy_bucket(snapshot["ct_equip"], bool(r.get("is_pistol"))),
+                    "t_econ": economy_bucket(snapshot["t_equip"], bool(r.get("is_pistol"))),
                 }
-            )
         ct_team, t_team = teams.get("CT"), teams.get("T")
         plant = next(
             (
@@ -118,6 +139,8 @@ def extract_formations(parser, rounds: list[dict], tick_rate: float) -> dict[str
             "winner": r.get("winner"),
             "complete": len(snapshots) == len(SNAPSHOT_SECONDS) and all(len(s["ct"]) == 5 for s in snapshots),
             "snapshots": snapshots,
+            "t_snapshots": t_snapshots,
+            "opening_context": opening_context,
             "context": {
                 "pistol": bool(r.get("is_pistol")),
                 "ct_equip": first["ct_equip"] if first else None,

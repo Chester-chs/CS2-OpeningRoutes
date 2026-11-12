@@ -11,18 +11,28 @@ from openingroutes.store import Store
 
 class Parser:
     def parse_ticks(self, fields, ticks):
-        return pd.DataFrame([
-            {
-                "tick": tick, "steamid": str(pid), "name": f"Player {pid}",
-                "X": float(pid), "Y": 20.0, "Z": 0.0,
-                "last_place_name": "BombsiteA" if pid < 5 else "TSpawn",
-                "team_num": 3 if pid < 5 else 2, "team_clan_name": "Alpha" if pid < 5 else "Beta",
-                "is_alive": not (pid == 6 and tick >= 640), "health": 100 if pid != 6 else 0,
-                "current_equip_value": 800 if tick == 0 else 400,
-                "inventory": [], "armor_value": 0,
-            }
-            for tick in ticks for pid in range(10)
-        ])
+        return pd.DataFrame(
+            [
+                {
+                    "tick": tick,
+                    "steamid": str(pid),
+                    "name": f"Player {pid}",
+                    "X": float(pid),
+                    "Y": 20.0,
+                    "Z": 0.0,
+                    "last_place_name": "BombsiteA" if pid < 5 else "TSpawn",
+                    "team_num": 3 if pid < 5 else 2,
+                    "team_clan_name": "Alpha" if pid < 5 else "Beta",
+                    "is_alive": not (pid == 6 and tick >= 640),
+                    "health": 100 if pid != 6 else 0,
+                    "current_equip_value": 800 if tick == 0 else 400,
+                    "inventory": [],
+                    "armor_value": 0,
+                }
+                for tick in ticks
+                for pid in range(10)
+            ]
+        )
 
     def parse_event(self, name, **kwargs):
         return pd.DataFrame()
@@ -33,8 +43,14 @@ class Parser:
 
 def round_row(end=2560):
     return {
-        "id": "demo-r1", "number": 1, "start_tick": 0, "freeze_end_tick": 0,
-        "end_tick": end, "is_pistol": True, "winner": "CT", "complete": True,
+        "id": "demo-r1",
+        "number": 1,
+        "start_tick": 0,
+        "freeze_end_tick": 0,
+        "end_tick": end,
+        "is_pistol": True,
+        "winner": "CT",
+        "complete": True,
         "equipment": [
             {"player_id": str(p), "side": "CT" if p < 5 else "T", "team": "Alpha" if p < 5 else "Beta"}
             for p in range(10)
@@ -74,13 +90,22 @@ def test_timeline_places_align_after_sorting_and_missing_coordinate_removal():
 
 def test_contacts_use_ids_and_enemy_damage_only_in_round():
     event = {
-        "tick": 100, "attacker_steamid": "5", "user_steamid": "0",
-        "attacker_team_num": 2, "user_team_num": 3,
-        "attacker_name": "same nickname", "user_name": "same nickname",
-        "user_X": 1, "user_Y": 2, "user_Z": 3, "user_last_place_name": "BombsiteA",
+        "tick": 100,
+        "attacker_steamid": "5",
+        "user_steamid": "0",
+        "attacker_team_num": 2,
+        "user_team_num": 3,
+        "attacker_name": "same nickname",
+        "user_name": "same nickname",
+        "user_X": 1,
+        "user_Y": 2,
+        "user_Z": 3,
+        "user_last_place_name": "BombsiteA",
     }
-    events = {"player_hurt": [event, {**event, "tick": 3000}, {**event, "attacker_team_num": 3}],
-              "player_death": [{**event, "tick": 110}]}
+    events = {
+        "player_hurt": [event, {**event, "tick": 3000}, {**event, "attacker_team_num": 3}],
+        "player_death": [{**event, "tick": 110}],
+    }
     contacts = extract.learning_events(events, round_row())
     assert [(e["kind"], e["tick"]) for e in contacts] == [("hurt", 100), ("death", 110)]
     assert contacts[0]["attacker_id"] == "5" and contacts[0]["victim_id"] == "0"
@@ -97,8 +122,14 @@ def test_reimport_backfills_learning_without_replacing_source_or_reviews(tmp_pat
     row["id"] = f"{key}-r1"
     source = {"verified": True, "match": "Alpha vs Beta", "reviewer": "curator"}
     original = {
-        "id": key, "source": source, "tick_rate": 64, "rounds": [row], "throws": [],
-        "players": [], "formations_version": 0, "places_version": extract.PLACES_VERSION,
+        "id": key,
+        "source": source,
+        "tick_rate": 64,
+        "rounds": [row],
+        "throws": [],
+        "players": [],
+        "formations_version": 0,
+        "places_version": extract.PLACES_VERSION,
     }
     store.save_match(copy.deepcopy(original))
     store.put("round_reviews", row["id"], {"resolution": "confirmed", "pistol_override": True})

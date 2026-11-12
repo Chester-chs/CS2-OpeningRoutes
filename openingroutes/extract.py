@@ -40,6 +40,7 @@ EVENTS = [
     "inferno_startburn",
     "decoy_started",
     "player_death",
+    "player_hurt",
     "bomb_planted",
     "bomb_defused",
     "bomb_exploded",
@@ -62,8 +63,106 @@ def file_hash(path):
 
 
 PLACES_VERSION = 2
+LEARNING_VERSION = 1
 EFFECT_PLACE_RADIUS = 300.0
 EFFECT_PLACE_DZ = 160.0
+
+
+def make_timeline(frame, players: dict, round_id: str, rate: float, stride: int) -> dict:
+    """Add aligned callouts without changing the six-field v1 coordinate tuples."""
+    routes = {}
+    for owner, group in frame.groupby("steamid"):
+        rows = records(group.dropna(subset=["X", "Y", "Z"]).sort_values("tick"))
+        routes[str(owner)] = {
+            "name": players.get(str(owner), str(owner)),
+            "points": [
+                [
+                    int(r["tick"]),
+                    round(r["X"], 2),
+                    round(r["Y"], 2),
+                    round(r["Z"], 2),
+                    side(r.get("team_num")),
+                    bool(r.get("is_alive")),
+                ]
+                for r in rows
+            ],
+            "places": [r.get("last_place_name") or None for r in rows],
+        }
+    return {
+        "round_id": round_id,
+        "tick_rate": rate,
+        "sample_hz": rate / stride,
+        "learning_version": LEARNING_VERSION,
+        "point_fields": ["tick", "x", "y", "z", "side", "alive"],
+        "players": routes,
+    }
+
+
+def learning_events(events: dict, row: dict) -> list[dict]:
+    """Enemy damage is a contact proxy, never proof of first visual contact."""
+    result = []
+    for name, kind in (("player_hurt", "hurt"), ("player_death", "death")):
+        for event in events.get(name, []):
+            tick = event["tick"]
+            attacker, victim = side(event.get("attacker_team_num")), side(event.get("user_team_num"))
+            if (
+                not row["freeze_end_tick"] <= tick <= (row.get("end_tick") or tick)
+                or attacker not in ("T", "CT")
+                or victim not in ("T", "CT")
+                or attacker == victim
+            ):
+                continue
+            result.append(
+                {
+                    "kind": kind,
+                    "tick": tick,
+                    "attacker_id": str(event.get("attacker_steamid") or ""),
+                    "victim_id": str(event.get("user_steamid") or ""),
+                    "attacker_side": attacker,
+                    "victim_side": victim,
+                    "attacker_place": event.get("attacker_last_place_name"),
+                    "victim_place": event.get("user_last_place_name"),
+                    "attacker_position": [event.get(f"attacker_{c}") for c in ("X", "Y", "Z")],
+                    "victim_position": [event.get(f"user_{c}") for c in ("X", "Y", "Z")],
+                }
+            )
+    return sorted(result, key=lambda e: (e["tick"], e["kind"] != "hurt"))
+
+
+def enrich_learning(parser, match: dict, store: Store):
+    """Backfill facts only. Curator source metadata, teaching and reviews are preserved."""
+    rows, rate = match["rounds"], match["tick_rate"]
+    stride = max(1, round(rate / 4))
+    ticks = set()
+    for row in rows:
+        end = row.get("end_tick") or row["freeze_end_tick"]
+        ticks.update(range(row["start_tick"], end + 1, stride))
+        ticks.add(row["freeze_end_tick"])
+    positions = parser.parse_ticks(
+        ["X", "Y", "Z", "team_num", "is_alive", "last_place_name", "current_equip_value"],
+        ticks=sorted(ticks),
+    )
+    positions["steamid"] = positions["steamid"].astype(str)
+    events = {
+        name: records(frame)
+        for name, frame in parser.parse_events(
+            ["player_hurt", "player_death"],
+            player=["X", "Y", "Z", "team_num", "last_place_name"],
+        )
+    }
+    names = {p["id"]: p["name"] for p in match["players"]}
+    for row in rows:
+        end = row.get("end_tick") or row["freeze_end_tick"]
+        frame = positions[(positions.tick >= row["start_tick"]) & (positions.tick <= end)]
+        store.write_timeline(row["id"], make_timeline(frame, names, row["id"], rate, stride))
+        equip = {
+            p["steamid"]: p.get("current_equip_value")
+            for p in records(frame[frame.tick == row["freeze_end_tick"]])
+        }
+        for player in row.get("equipment", []):
+            player["equip"] = equip.get(player["player_id"])
+        row["learning_events"] = learning_events(events, row)
+    match["learning_version"] = LEARNING_VERSION
 
 
 def annotate_places(parser, throws: list[dict], observed=None) -> int:
@@ -107,6 +206,8 @@ def enrich_places(path: Path, store: Store) -> dict:
     if match is None:
         raise ValueError("This demo has not been imported")
     parser = DemoParser(str(path))
+    if match.get("learning_version") != LEARNING_VERSION:
+        enrich_learning(parser, match, store)
     if match.get("places_version") != PLACES_VERSION:
         annotate_places(parser, match["throws"])
         match["places_version"] = PLACES_VERSION
@@ -132,6 +233,7 @@ def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: 
         if (
             existing.get("places_version") != PLACES_VERSION
             or existing.get("formations_version") != FORMATIONS_VERSION
+            or existing.get("learning_version") != LEARNING_VERSION
         ):
             progress("places")
             return enrich_places(path, store)
@@ -152,6 +254,7 @@ def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: 
                 "team_clan_name",
                 "inventory",
                 "armor_value",
+                "last_place_name",
             ],
             other=["total_rounds_played", "is_warmup_period", "game_phase"],
         )
@@ -200,6 +303,7 @@ def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: 
             "armor_value",
             "health",
             "last_place_name",
+            "current_equip_value",
         ],
         ticks=sample_ticks,
     )
@@ -303,6 +407,7 @@ def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: 
                 "side": side(row.get("team_num")),
                 "inventory": row.get("inventory"),
                 "armor": row.get("armor_value"),
+                "equip": row.get("current_equip_value"),
             }
             for row in records(equipment)
         ]
@@ -322,27 +427,8 @@ def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: 
             for e in events.get(name, [])
             if r["freeze_end_tick"] <= e["tick"] <= end
         ]
-        routes = {}
-        for owner, group in frame.groupby("steamid"):
-            routes[owner] = {
-                "name": players.get(owner, owner),
-                "points": [
-                    [int(t), round(x, 2), round(y, 2), round(z, 2), side(team), bool(alive)]
-                    for t, x, y, z, team, alive in group.dropna(subset=["X", "Y", "Z"])[
-                        ["tick", "X", "Y", "Z", "team_num", "is_alive"]
-                    ].itertuples(index=False, name=None)
-                ],
-            }
-        store.write_timeline(
-            r["id"],
-            {
-                "round_id": r["id"],
-                "tick_rate": rate,
-                "sample_hz": rate / stride,
-                "point_fields": ["tick", "x", "y", "z", "side", "alive"],
-                "players": routes,
-            },
-        )
+        r["learning_events"] = learning_events(events, r)
+        store.write_timeline(r["id"], make_timeline(frame, players, r["id"], rate, stride))
     progress("formations")
     clans = [e.get("team") for r in rounds for e in r.get("equipment", [])]
     aliases = canonical_teams(clans, source.get("match", ""))
@@ -358,6 +444,7 @@ def extract_demo(path: Path, source: dict, store: Store, progress=lambda stage: 
         "parser_version": version("demoparser2"),
         "places_version": PLACES_VERSION,
         "formations_version": FORMATIONS_VERSION,
+        "learning_version": LEARNING_VERSION,
         "formations": formations,
         "team_aliases": aliases,
         "game_version": header.get("patch_version", "unknown"),
