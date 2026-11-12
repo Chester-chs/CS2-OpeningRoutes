@@ -15,7 +15,9 @@ def test_static_learning_exports_verified_round_evidence_without_teaching_drafts
     match["source"]["verified"] = False
     store.save_match(match)
     store.save_teaching("match0-t1-111", {"status": "draft", "title": "PRIVATE TEACHING"})
-    store.put("learning_groups", "private-role", {"kind": "role", "confirmed": False, "label": "PRIVATE ROLE"})
+    store.put(
+        "learning_groups", "private-role", {"kind": "role", "confirmed": False, "label": "PRIVATE ROLE"}
+    )
     bundle = export_bundle(store, tmp_path / "export")
     catalog = json.loads((bundle / "catalog.json").read_text(encoding="utf-8"))
     assert catalog["schema_version"] == 1 and catalog["learning_index"] == "learning/index.json"
@@ -40,9 +42,15 @@ def test_learning_plan_provenance_blocks_cross_round_steps_and_unverified_public
     seed_learning(tmp_path)
     client = TestClient(create_app(tmp_path, testing=True))
     plan = {
-        "id": "learning-draft", "title": "Test learning draft", "area": "A", "side": "CT",
-        "purpose": "Observed sample", "conditions": "Pistol", "status": "draft",
-        "source_round_id": "match0-r1", "source_players": ["111"],
+        "id": "learning-draft",
+        "title": "Test learning draft",
+        "area": "A",
+        "side": "CT",
+        "purpose": "Observed sample",
+        "conditions": "Pistol",
+        "status": "draft",
+        "source_round_id": "match0-r1",
+        "source_players": ["111"],
         "learning_profile_id": "a" * 24,
         "steps": [{"throw_id": "match0-t1-111", "time": 2, "role": "Same nickname"}],
     }

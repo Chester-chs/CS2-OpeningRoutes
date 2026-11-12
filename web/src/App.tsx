@@ -36,9 +36,13 @@ import Detail from "./Detail";
 import Manage from "./Manage";
 import Plans from "./Plans";
 import Timeline from "./Timeline";
+import PlayerAreas, { PracticeShelf } from "./PlayerAreas";
+import { loadPractice } from "./learning";
+import type { LearningSelection } from "./learning";
 
 const nav = [
   { id: "home", label: "发现", icon: Crosshair },
+  { id: "learn", label: "跟着选手学", icon: Target },
   { id: "plans", label: "控图与反制", icon: MapIcon },
   { id: "ct", label: "CT 防守研究", icon: Shield },
   { id: "pistol", label: "手枪局", icon: Swords },
@@ -48,6 +52,7 @@ const nav = [
 ];
 const titles: Record<string, string> = {
   home: "从比赛里找到答案。",
+  learn: "跟着选手学",
   plans: "控图与反制",
   ct: "CT 防守研究",
   pistol: "手枪局",
@@ -74,6 +79,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [page, setPage] = useState("home");
+  const [learningSeed, setLearningSeed] = useState<LearningSelection>({});
   const [filters, setFilters] = useState<Filters>({});
   const [limit, setLimit] = useState(24);
   const [detail, setDetail] = useState<{
@@ -195,6 +201,11 @@ export default function App() {
     setCompare([]);
     setShowCompare(false);
   }
+  function openLearning(seed: LearningSelection) {
+    setLearningSeed(seed);
+    setDetail(null);
+    navigate("learn");
+  }
   function update(key: keyof Filters, value: string) {
     setFilters((v) => ({
       ...v,
@@ -278,7 +289,13 @@ export default function App() {
         notes[key.slice(8)] = localStorage.getItem(key) || "";
     }
     const blob = new Blob(
-      [JSON.stringify({ version: 1, favorites, notes }, null, 2)],
+      [
+        JSON.stringify(
+          { version: 1, favorites, notes, practice: loadPractice() },
+          null,
+          2,
+        ),
+      ],
       { type: "application/json" },
     );
     const url = URL.createObjectURL(blob);
@@ -309,6 +326,32 @@ export default function App() {
         if (valid(id) && typeof note === "string")
           localStorage.setItem(`or-note-${id}`, note);
       localStorage.setItem("or-favorites", JSON.stringify(merged));
+      if (Array.isArray(value.practice)) {
+        const existing = loadPractice();
+        const restored = value.practice.filter(
+          (p: Record<string, unknown>) =>
+            p &&
+            typeof p.id === "string" &&
+            typeof p.profile_id === "string" &&
+            typeof p.round_id === "string" &&
+            typeof p.title === "string" &&
+            typeof p.map === "string" &&
+            typeof p.note === "string" &&
+            Array.isArray(p.steps) &&
+            p.steps.every((s) => typeof s === "string") &&
+            Array.isArray(p.checked) &&
+            p.checked.every(Number.isInteger),
+        );
+        localStorage.setItem(
+          "or-practice",
+          JSON.stringify([
+            ...existing,
+            ...restored.filter(
+              (p: { id: string }) => !existing.some((e) => e.id === p.id),
+            ),
+          ]),
+        );
+      }
       setFavorites(merged);
       setStorageMessage("学习记录已恢复到当前浏览器。");
     } catch (e) {
@@ -397,12 +440,12 @@ export default function App() {
                   找到答案。
                 </h1>
                 <p>
-                  看懂职业选手为什么丢这颗道具，
+                  跟着职业选手或战队，学一块区域怎么打。
                   <br />
-                  再把站位、时机与配合，带进你的下一局。
+                  从开局路线、时机与对抗，走到完整回合和跟练。
                 </p>
-                <button className="button" onClick={() => navigate("utility")}>
-                  浏览道具库 <ArrowRight size={17} />
+                <button className="button" onClick={() => openLearning({})}>
+                  跟着选手学 <ArrowRight size={17} />
                 </button>
                 <button
                   className="text-button light"
@@ -471,7 +514,7 @@ export default function App() {
                 </svg>
                 <div className="art-label">
                   <Target size={17} />
-                  每一次投掷，都有上下文。
+                  一个人，一块区域，完整回合。
                 </div>
               </div>
             </section>
@@ -497,14 +540,17 @@ export default function App() {
               正在读取学习资料…
             </p>
           )}
-          {client.mode === "desktop" && catalog.maps && page !== "manage" && (
-            <MapLoader
-              maps={catalog.maps}
-              loaded={catalog.loaded || []}
-              loading={mapLoading}
-              load={(m) => ensureMap(m)}
-            />
-          )}
+          {client.mode === "desktop" &&
+            catalog.maps &&
+            page !== "manage" &&
+            page !== "learn" && (
+              <MapLoader
+                maps={catalog.maps}
+                loaded={catalog.loaded || []}
+                loading={mapLoading}
+                load={(m) => ensureMap(m)}
+              />
+            )}
           {detail && !detailReady && (
             <p role="status" className="notice">
               正在载入这条记录所在地图的资料…
@@ -558,10 +604,10 @@ export default function App() {
               <div className="entry-grid">
                 {[
                   {
-                    id: "plans",
-                    icon: MapIcon,
-                    title: "先理解控图",
-                    copy: "从区域争夺进入，串起双方的道具与反制。",
+                    id: "learn",
+                    icon: Target,
+                    title: "跟着选手学",
+                    copy: "从人和位置进入，比较默认路线、时机与情境变化。",
                   },
                   {
                     id: "pistol",
@@ -570,10 +616,10 @@ export default function App() {
                     copy: "看装备怎么分、队伍怎么展开，如何赢下第一局。",
                   },
                   {
-                    id: "utility",
-                    icon: Flame,
-                    title: "学会一颗道具",
-                    copy: "查找投掷、对照职业示范，逐步补齐操作细节。",
+                    id: "plans",
+                    icon: MapIcon,
+                    title: "整理控图方案",
+                    copy: "把真实回合串成方案，接上已有教学与复现跟练。",
                   },
                 ].map((entry) => (
                   <button
@@ -607,6 +653,16 @@ export default function App() {
               onRefresh={refresh}
               onOpenRound={(id) => setDetail({ id, kind: "round" })}
             />
+          ) : page === "learn" ? (
+            <PlayerAreas
+              key={JSON.stringify(learningSeed)}
+              client={client}
+              catalog={catalog}
+              seed={learningSeed}
+              openRound={(id) => setDetail({ id, kind: "round" })}
+              openThrow={(id) => setDetail({ id, kind: "throw" })}
+              onRefresh={refresh}
+            />
           ) : page === "ct" ? (
             <CTPatterns
               client={client}
@@ -615,6 +671,7 @@ export default function App() {
               onSelectMap={(m) => ensureMap(m)}
               loadingMaps={mapLoading}
               openRound={(id) => setDetail({ id, kind: "round" })}
+              onLearn={openLearning}
             />
           ) : page === "plans" ? (
             <Plans
@@ -757,6 +814,24 @@ export default function App() {
               )}
               {page === "pistol" && (
                 <>
+                  <button
+                    className="button secondary"
+                    onClick={() =>
+                      openLearning({
+                        map: filters.map,
+                        side:
+                          filters.side === "CT" || filters.side === "T"
+                            ? filters.side
+                            : undefined,
+                        pistol: true,
+                        subject: catalog.rounds
+                          .flatMap((r) => r.equipment)
+                          .find((e) => e.player === filters.player)?.player_id,
+                      })
+                    }
+                  >
+                    按选手研究手枪局
+                  </button>
                   <div className="stats">
                     <Stat
                       label="正式手枪局样本"
@@ -797,6 +872,13 @@ export default function App() {
                     </div>
                   </section>
                 </>
+              )}
+              {page === "saved" && (
+                <PracticeShelf
+                  key={storageMessage}
+                  openRound={(id) => setDetail({ id, kind: "round" })}
+                  openLearning={openLearning}
+                />
               )}
               {page === "saved" && (
                 <div className="actions">
@@ -1000,6 +1082,7 @@ export default function App() {
       </div>
       {detail && detailReady && (
         <Detail
+          onLearn={openLearning}
           key={detail.id}
           {...detail}
           catalog={catalog}

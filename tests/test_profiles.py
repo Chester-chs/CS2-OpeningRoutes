@@ -302,6 +302,8 @@ def test_plan_edits_do_not_restart_the_learning_cache(tmp_path):
     match["rounds"][0]["learning_events"] = []
     store.save_match(match)
     assert store._profile_key() != before
+
+
 def test_legacy_light_reads_exclude_contact_facts_and_refresh_after_import(tmp_path):
     store = seed_learning(tmp_path, matches=1, rounds=2)
     match = store.all("matches")["match0"]
@@ -311,4 +313,3 @@ def test_legacy_light_reads_exclude_contact_facts_and_refresh_after_import(tmp_p
     match["rounds"][0]["number"] = 77
     store.save_match(match)
     assert store._light_matches()[0][1][0]["number"] == 77
-

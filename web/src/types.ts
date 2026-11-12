@@ -135,6 +135,9 @@ export type Round = {
   };
 };
 export type Plan = {
+  source_round_id?: string | null;
+  source_players?: string[];
+  learning_profile_id?: string | null;
   id: string;
   title: string;
   area: string;

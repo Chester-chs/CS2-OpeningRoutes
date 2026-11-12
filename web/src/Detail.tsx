@@ -11,6 +11,7 @@ import {
 } from "./data";
 import type { Catalog, Round, Teaching, Throw } from "./types";
 import Timeline from "./Timeline";
+import type { LearningSelection } from "./learning";
 
 export function Video({
   value,
@@ -237,6 +238,7 @@ export default function Detail({
   onOpen,
   favorites,
   toggleFavorite,
+  onLearn,
 }: {
   id: string;
   kind: "throw" | "round";
@@ -247,6 +249,7 @@ export default function Detail({
   onOpen?: (id: string) => void;
   favorites: string[];
   toggleFavorite: (id: string) => void;
+  onLearn?: (seed: LearningSelection) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [tab, setTab] = useState("learn");
@@ -471,6 +474,30 @@ export default function Detail({
               </section>
             )}
             <RoundFacts round={round} catalog={catalog} />
+            {onLearn && (
+              <section>
+                <h3>继续研究这个人的位置</h3>
+                <div className="chips">
+                  {round.equipment.map((e) => (
+                    <button
+                      className="chip"
+                      key={e.player_id}
+                      onClick={() =>
+                        onLearn({
+                          kind: "player",
+                          subject: e.player_id,
+                          map: match.map,
+                          side: e.side,
+                          pistol: round.is_pistol,
+                        })
+                      }
+                    >
+                      {e.player} · {e.side}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
             <RoundFormation round={round} catalog={catalog} />
             {client.mode === "desktop" && kind === "round" && (
               <section className="editor">

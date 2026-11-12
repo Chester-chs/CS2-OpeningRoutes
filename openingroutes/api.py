@@ -91,6 +91,11 @@ class Plan(BaseModel):
     counter_ids: list[str] = Field(default_factory=list, max_length=30)
     counter_explanation: str = Field(default="", max_length=2000)
     status: str = Field(default="draft", pattern=r"^(draft|published|withdrawn)$")
+    source_round_id: str | None = Field(default=None, pattern=ID)
+    source_players: list[Annotated[str, Field(pattern=r"^[0-9]{1,20}$")]] = Field(
+        default_factory=list, max_length=10
+    )
+    learning_profile_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{24}$")
 
 
 class LearningGroup(BaseModel):
@@ -586,6 +591,18 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
         available = {t["id"]: t for t in store.throws_by_id([s.throw_id for s in plan.steps])}
         if any(s.throw_id not in available for s in plan.steps):
             raise HTTPException(422, "Plan references a missing throw")
+        if plan.source_round_id and (
+            not plan.source_players
+            or any(
+                available[s.throw_id].get("round_id") != plan.source_round_id
+                or available[s.throw_id].get("player_id") not in plan.source_players
+                or available[s.throw_id].get("side") != plan.side
+                for s in plan.steps
+            )
+        ):
+            raise HTTPException(
+                422, "Learning draft steps must belong to the same observed round and players"
+            )
         if plan.status == "published" and any(available[s.throw_id]["gaps"] for s in plan.steps):
             raise HTTPException(422, "All plan steps need complete verified teaching")
         if any(not re.fullmatch(ID, key) for key in plan.counter_ids):

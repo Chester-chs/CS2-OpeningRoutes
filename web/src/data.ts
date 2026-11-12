@@ -321,6 +321,51 @@ export class DataClient {
     if (!response.ok) throw new Error(`读取地图 ${map} 的资料失败。`);
     return response.json();
   }
+  async learningIndex(): Promise<import("./learning").LearningIndex> {
+    const name = "learning/index.json";
+    if (this.mode === "web" && !this.files[name]) {
+      return {
+        schema_version: 1,
+        state: "unavailable",
+        profiles: [],
+        coverage: {},
+        regions: {},
+        groups: {},
+      };
+    }
+    const response = await fetch(
+      this.mode === "desktop" ? "/api/learning" : `./content/${name}`,
+    );
+    if (!response.ok) throw new Error("读取选手区域档案失败。");
+    const bytes = await response.arrayBuffer();
+    await this.verify(name, bytes);
+    const index = JSON.parse(new TextDecoder().decode(bytes));
+    if (index.schema_version !== 1) throw new Error("档案格式不兼容。");
+    return index;
+  }
+  async learningProfile(
+    id: string,
+  ): Promise<import("./learning").LearningProfile> {
+    if (!/^[a-f0-9]{24}$/.test(id)) throw new Error("档案编号无效。");
+    const name = `learning/profiles/${id}.json`;
+    const response = await fetch(
+      this.mode === "desktop"
+        ? `/api/learning/profiles/${id}`
+        : `./content/${name}`,
+    );
+    if (!response.ok) throw new Error("档案已更新或暂不可用，请刷新列表。");
+    const bytes = await response.arrayBuffer();
+    await this.verify(name, bytes);
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+  async observedThrows(ids: string[]): Promise<Throw[]> {
+    if (this.mode !== "desktop") return [];
+    const response = await fetch(
+      `/api/throws?ids=${encodeURIComponent(ids.join(","))}`,
+    );
+    if (!response.ok) throw new Error("读取样本道具失败。");
+    return response.json();
+  }
   /** The full row with its trajectory; the static site already has it. */
   async throwDetail(id: string): Promise<Throw | null> {
     if (this.mode !== "desktop") return null;

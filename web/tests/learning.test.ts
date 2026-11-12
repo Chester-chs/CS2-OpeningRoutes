@@ -63,7 +63,18 @@ describe("player-area learning workflow", () => {
     expect(sampleMatchesContext(sample, "economy:pistol")).toBe(true);
   });
   it("personalizes practice with the sample's actual movement and throw times", () => {
-    const actual = { ...sample, utility: [{ id: "good", player_id: "111", player: "Player", time: 4.25, kind: "smoke" }] } as LearningSample;
+    const actual = {
+      ...sample,
+      utility: [
+        {
+          id: "good",
+          player_id: "111",
+          player: "Player",
+          time: 4.25,
+          kind: "smoke",
+        },
+      ],
+    } as LearningSample;
     const steps = practiceFromSample(profile, actual).steps.join("\n");
     expect(steps).toContain("3–20s BombsiteA");
     expect(steps).toContain("4.25s");

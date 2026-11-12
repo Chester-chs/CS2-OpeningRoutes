@@ -324,10 +324,14 @@ class Store:
 
     def _light_matches(self):
         """Match metadata, rounds and throw counts, without parsing the throws in Python."""
+        return self._memoized("light-matches", self._read_light_matches)
+
+    def _read_light_matches(self):
         with closing(self.connect()) as c, c:
             rows = c.execute(
                 "SELECT json_remove(data,'$.rounds','$.throws','$.formations'),"
-                " json_extract(data,'$.rounds'), json_array_length(data,'$.throws') FROM matches"
+                " (SELECT json_group_array(json_remove(value,'$.learning_events'))"
+                " FROM json_each(data,'$.rounds')), json_array_length(data,'$.throws') FROM matches"
             ).fetchall()
         return [(json.loads(meta), json.loads(rounds or "[]"), count or 0) for meta, rounds, count in rows]
 

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { BookOpen, ClipboardPlus, Eye } from "lucide-react";
 import { DataClient, isMisthrow, kindNames } from "./data";
+import type { LearningSelection } from "./learning";
 import type {
   AreaShares,
   Catalog,
@@ -139,6 +140,7 @@ export default function CTPatterns({
   openRound,
   onSelectMap,
   loadingMaps = [],
+  onLearn,
 }: {
   client: DataClient;
   catalog: Catalog;
@@ -146,6 +148,7 @@ export default function CTPatterns({
   openRound: (id: string) => void;
   onSelectMap?: (map: string) => void;
   loadingMaps?: string[];
+  onLearn?: (seed: LearningSelection) => void;
 }) {
   const analyses = catalog.ct_patterns || {};
   // The desktop studio lists every map from the summary; analyses arrive per map.
@@ -165,6 +168,14 @@ export default function CTPatterns({
   const loaded = !catalog.maps || (catalog.loaded || []).includes(map);
   const header = (
     <div className="section-line">
+      {onLearn && (
+        <button
+          className="button secondary"
+          onClick={() => onLearn({ map, side: "CT" })}
+        >
+          跟着本图 CT 选手学
+        </button>
+      )}
       <p className="muted">
         按论文 TAGNet 的流程，从职业 CT 回合的 10/12/15/18/20
         秒站位归纳防守阵型，并进一步学习每支战队、每名选手的习惯站位。

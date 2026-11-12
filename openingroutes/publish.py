@@ -13,6 +13,10 @@ from .store import Store, now
 
 def export_bundle(store: Store, output: Path, *, include_pistols: bool = False) -> Path:
     catalog = store.catalog()
+    learning = store.learning_index(wait=True)
+    if learning["state"] != "ready":
+        raise ValueError("Learning data changed during export; retry after imports finish")
+    learning_key = store._profile_key()
     verified = {m["id"] for m in catalog["matches"] if m["source"]["verified"]}
 
     def misthrow(t):
@@ -48,6 +52,18 @@ def export_bundle(store: Store, output: Path, *, include_pistols: bool = False) 
             and not r.get("excluded")
             and not r.get("review_required")
         )
+    learning_matches = {
+        m["id"] for m in catalog["matches"] if m["id"] in verified and m.get("learning_version") == 1
+    }
+    if learning["profiles"]:
+        round_ids.update(
+            r["id"]
+            for r in catalog["rounds"]
+            if r["match_id"] in learning_matches
+            and r.get("complete")
+            and not r.get("excluded")
+            and not r.get("review_required")
+        )
     events: dict[str, list] = {key: [] for key in round_ids}
     for t in catalog["throws"]:
         if t["round_id"] in events:
@@ -78,6 +94,26 @@ def export_bundle(store: Store, output: Path, *, include_pistols: bool = False) 
     output.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".staging-", dir=output))
     try:
+        learning_dir = staging / "learning"
+        (learning_dir / "profiles").mkdir(parents=True)
+        for entry in learning["profiles"]:
+            profile = store.learning_profile(entry["id"])
+            if profile is None or any(s["round_id"] not in round_ids for s in profile["samples"]):
+                raise ValueError("Learning profile has missing round evidence")
+            (learning_dir / "profiles" / f"{entry['id']}.json").write_text(
+                json.dumps(profile, ensure_ascii=False, allow_nan=False), encoding="utf-8"
+            )
+        public_learning = {
+            **learning,
+            "groups": {},
+            "coverage": {
+                **learning["coverage"],
+                "library_rounds": learning["coverage"]["eligible_rounds"],
+            },
+        }
+        (learning_dir / "index.json").write_text(
+            json.dumps(public_learning, ensure_ascii=False), encoding="utf-8"
+        )
         for row in rounds:
             timeline = store.timeline(row["id"])
             if timeline is None:
@@ -133,6 +169,7 @@ def export_bundle(store: Store, output: Path, *, include_pistols: bool = False) 
             "variants": variants,
             "places": places,
             "ct_patterns": ct_patterns,
+            "learning_index": "learning/index.json",
         }
         (staging / "catalog.json").write_text(json.dumps(bundle, ensure_ascii=False), encoding="utf-8")
         checksums = {
@@ -150,6 +187,8 @@ def export_bundle(store: Store, output: Path, *, include_pistols: bool = False) 
         }
         (staging / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
         destination = output / version
+        if store._profile_key() != learning_key:
+            raise ValueError("Learning sources changed during export; retry after the update finishes")
         staging.replace(destination)
         return destination
     except Exception:
