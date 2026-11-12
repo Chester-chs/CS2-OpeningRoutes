@@ -1,0 +1,50 @@
+import { test, expect } from "@playwright/test";
+
+test("player area learning links pistol samples, whole rounds and saved practice", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "主要导航" }).getByRole("button", { name: "跟着选手学", exact: true }).click();
+  await expect(page.getByTestId("learning-profile")).toBeVisible();
+  await page.getByLabel("学习地图", { exact: true }).selectOption("de_mirage");
+  await page.getByLabel("学习阵营", { exact: true }).selectOption("CT");
+  await page.getByLabel("学习区域", { exact: true }).selectOption("A");
+  await expect(page.getByTestId("learning-profile")).toContainText("样本");
+  await expect(page.getByTestId("learning-profile")).toContainText("置信");
+  await page.getByLabel("学习情境", { exact: true }).selectOption("pistol");
+  await expect(page.getByTestId("learning-sample").first()).toContainText("手枪局");
+  await page.getByRole("button", { name: "保存跟练清单", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("已保存");
+  await page.getByRole("button", { name: "查看全员完整回合", exact: true }).click();
+  await page.getByRole("button", { name: "完整回合", exact: true }).click();
+  await expect(page.getByLabel("回合时间轴")).toBeVisible();
+  await page.getByLabel("关闭详情").click();
+  await page.getByRole("button", { name: "我的收藏", exact: true }).click();
+  const practice = page.getByTestId("practice-card").first();
+  await expect(practice).toBeVisible();
+  await practice.getByRole("checkbox").first().check();
+  await practice.getByLabel("跟练笔记").fill("check the opening route");
+  await page.reload();
+  await page.getByRole("button", { name: "我的收藏", exact: true }).click();
+  await expect(page.getByTestId("practice-card").first().getByRole("checkbox").first()).toBeChecked();
+  await expect(page.getByTestId("practice-card").first().getByLabel("跟练笔记")).toHaveValue("check the opening route");
+});
+
+test("team T profiles create a same-round draft and mobile profiles fit the screen", async ({ page, request }) => {
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "主要导航" }).getByRole("button", { name: "跟着选手学", exact: true }).click();
+  await expect(page.getByTestId("learning-profile")).toBeVisible();
+  await page.getByLabel("学习对象", { exact: true }).selectOption("team");
+  await page.getByLabel("学习阵营", { exact: true }).selectOption("T");
+  await expect(page.getByTestId("learning-profile")).toContainText("T ·");
+  await page.getByRole("button", { name: "生成方案草稿", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("方案草稿已保存");
+  const catalog = await (await request.get("/api/catalog/summary")).json();
+  const draft = catalog.plans.find((p: { learning_profile_id?: string }) => p.learning_profile_id);
+  expect(draft.status).toBe("draft");
+  expect(draft.source_round_id).toBeTruthy();
+  expect(draft.steps.length).toBeGreaterThan(0);
+  const session = await (await request.get("/api/session")).json();
+  const rejected = await request.put(`/api/plans/${draft.id}`, { headers: { "X-Session-Token": session.token }, data: { ...draft, status: "published" } });
+  expect(rejected.status()).toBe(422);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+});
