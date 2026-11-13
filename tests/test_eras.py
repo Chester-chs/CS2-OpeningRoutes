@@ -1,5 +1,7 @@
 """Map eras: profiles pool a map's games across patches inside a curated period (synthetic data)."""
 
+from itertools import pairwise
+
 from fastapi.testclient import TestClient
 
 from openingroutes import eras
@@ -22,7 +24,7 @@ def test_era_table_has_unique_ordered_and_non_overlapping_ranges():
         assert len({r["id"] for r in rows}) == len(rows)
         ranges = sorted((r["from"], r["to"]) for r in rows)
         assert all(start <= end for start, end in ranges)
-        assert all(previous[1] < current[0] for previous, current in zip(ranges, ranges[1:]))
+        assert all(previous[1] < current[0] for previous, current in pairwise(ranges))
         assert all(r["id"].startswith(f"{map_name}:") for r in rows)
 
 
@@ -43,7 +45,10 @@ def test_patches_inside_the_era_pool_into_one_profile_with_the_split():
     [profile] = players(build(library, timelines))
     assert profile["version"] == ERA and profile["era"]["label"] == "2026-09/10"
     assert profile["counts"]["matches"] == 5 and profile["confidence"]["status"] == "descriptive"
-    assert profile["patches"] == {"14180": {"rounds": 14, "matches": 2}, "14190": {"rounds": 21, "matches": 3}}
+    assert profile["patches"] == {
+        "14180": {"rounds": 14, "matches": 2},
+        "14190": {"rounds": 21, "matches": 3},
+    }
     assert {s["game_version"] for s in profile["samples"]} == {"14180", "14190"}
 
 
@@ -76,8 +81,18 @@ def test_splitting_an_era_splits_profiles_and_the_cache_key(tmp_path, monkeypatc
     assert len(players(build(library, timelines))) == 1
     split = {
         "de_mirage": [
-            {"id": "de_mirage:2026-09/10a", "label": "2026-09—10-15", "from": "2026-09-01", "to": "2026-10-15"},
-            {"id": "de_mirage:2026-10b", "label": "2026-10-16—10-31", "from": "2026-10-16", "to": "2026-10-31"},
+            {
+                "id": "de_mirage:2026-09/10a",
+                "label": "2026-09—10-15",
+                "from": "2026-09-01",
+                "to": "2026-10-15",
+            },
+            {
+                "id": "de_mirage:2026-10b",
+                "label": "2026-10-16—10-31",
+                "from": "2026-10-16",
+                "to": "2026-10-31",
+            },
         ]
     }
     store = seed_learning(tmp_path)

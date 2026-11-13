@@ -7,12 +7,13 @@ from collections import Counter, defaultdict
 
 import numpy as np
 
+from . import eras
 from .domain import effective_round
 from .formations import economy_bucket
 from .patterns import DEFAULT_MACRO
 from .places import place_label
 
-PROFILE_VERSION = 1
+PROFILE_VERSION = 2  # 2: map eras pool patches
 WINDOW_SECONDS = 30
 HOLD_SECONDS = 2
 AREA_LABELS = {"A": "A 区", "B": "B 区", "Mid": "中路", "CT": "CT 后场", "T": "T 后场"}
@@ -238,6 +239,7 @@ def _sample(match, row, timeline, actors, team, side, places, control, throws, r
         "economy": economy_bucket(total, bool(row.get("is_pistol"))),
         "score": ("leading" if score > 0 else "trailing" if score < 0 else "tied") if ctx else "unknown",
         "date": match["source"].get("date", ""),
+        "game_version": match.get("game_version"),
         "source": {k: match["source"].get(k) for k in ("event", "match", "date", "url")},
         "routes": {pid: routes[pid] for pid in actors},
         "standing_places": standing,
@@ -373,8 +375,9 @@ def build(matches, timeline_loader, *, reviews=None, overrides=None, labels=None
                         selected = [e["player_id"] for e in members if e["player_id"] in g.get("players", [])]
                         if selected:
                             subjects.append(("role", gid, g["label"], team, side, gid, selected))
+                era = eras.era_for(map_name, match["source"].get("date", ""), match.get("game_version"))
                 for kind, subject, name, team, side, epoch, actors in subjects:
-                    version = str(match.get("game_version") or f"unknown:{match['id']}")
+                    version = era["id"] if era else str(match.get("game_version") or f"unknown:{match['id']}")
                     identity = (kind, subject, map_name, version, side, area, team, epoch)
                     key = hashlib.sha256(json.dumps(identity).encode()).hexdigest()[:24]
                     p = profiles.setdefault(
@@ -386,6 +389,7 @@ def build(matches, timeline_loader, *, reviews=None, overrides=None, labels=None
                             "name": name,
                             "map": map_name,
                             "version": version,
+                            "era": era,
                             "side": side,
                             "area": area,
                             "area_label": region["label"],
@@ -408,6 +412,12 @@ def build(matches, timeline_loader, *, reviews=None, overrides=None, labels=None
         p["samples"] = samples
         p.update(summarize(samples))
         p["date_from"], p["date_to"] = min(s["date"] for s in samples), max(s["date"] for s in samples)
+        patches = defaultdict(lambda: (set(), set()))
+        for s in samples:
+            rounds, games = patches[str(s["game_version"] or "unknown")]
+            rounds.add(s["round_id"])
+            games.add(s["match_id"])
+        p["patches"] = {k: {"rounds": len(r), "matches": len(g)} for k, (r, g) in sorted(patches.items())}
         p["contexts"] = {}
         for field in ("economy", "score"):
             for value in sorted({s[field] for s in samples}):
@@ -432,6 +442,8 @@ def build(matches, timeline_loader, *, reviews=None, overrides=None, labels=None
                     "aliases",
                     "map",
                     "version",
+                    "era",
+                    "patches",
                     "side",
                     "area",
                     "area_label",

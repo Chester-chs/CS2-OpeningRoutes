@@ -9,6 +9,8 @@ import {
   practiceFromSample,
   sampleMatchesContext,
   savePractice,
+  patchSplit,
+  periodLabel,
   scoreNames,
 } from "./learning";
 import type {
@@ -237,7 +239,8 @@ export default function PlayerAreas({
             覆盖 {index.coverage.analyzed_rounds || 0} /{" "}
             {index.coverage.eligible_rounds || 0} 个来源已核验有效回合；
             {index.coverage.missing_rounds || 0} 个缺少区域路线，需重新导入原
-            Demo。档案按游戏版本分开，避免混用地图更新前后的样本。
+            Demo。同一地图时期内的比赛跨补丁合并统计（目前 Mirage 2026 年 9—10
+            月），档案标题下列出各补丁的局数；时期之外的比赛仍按补丁分开。
           </p>
           <div className="learning-filters">
             <Choice
@@ -278,11 +281,11 @@ export default function PlayerAreas({
               change={(area) => select({ area })}
             />
             <Choice
-              label="战队时期与版本"
+              label="战队时期与地图时期"
               value={id || ""}
               options={choices.periods.map((p) => [
                 p.id,
-                `${p.team} · ${p.date_from}—${p.date_to} · ${p.version} · ${p.counts.rounds} 局`,
+                `${p.team} · ${p.date_from}—${p.date_to} · ${periodLabel(p)} · ${p.counts.rounds} 局`,
               ])}
               change={(profile) => select({ profile })}
             />
@@ -470,7 +473,8 @@ function Profile({
         />
       </div>
       <p className="micro">
-        {profile.date_from}—{profile.date_to} · 版本 {profile.version} ·{" "}
+        {profile.date_from}—{profile.date_to} ·{" "}
+        <span data-testid="patch-split">{patchSplit(profile)}</span> ·{" "}
         {profile.kind === "player"
           ? `SteamID ${profile.subject_id}`
           : `${profile.members.length} 名选手分别保留个人档案`}{" "}
