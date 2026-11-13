@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DataClient } from "../src/data";
 import {
   draftLearningPlan,
+  patchSplit,
+  periodLabel,
   practiceFromSample,
   sampleMatchesContext,
 } from "../src/learning";
@@ -101,5 +103,46 @@ describe("player-area learning workflow", () => {
     await expect(client.learningProfile("../other")).rejects.toThrow(
       "档案编号",
     );
+  });
+});
+
+describe("map eras", () => {
+  const pooled = {
+    ...profile,
+    version: "de_mirage:2026-09/10",
+    era: {
+      id: "de_mirage:2026-09/10",
+      label: "2026-09/10",
+      from: "2026-09-01",
+      to: "2026-10-31",
+    },
+    patches: {
+      "14190": { rounds: 52, matches: 3 },
+      "14188": { rounds: 31, matches: 2 },
+    },
+  } as LearningProfile;
+  it("names the pooled period and lists the patches by share", () => {
+    expect(periodLabel(pooled)).toBe("地图时期 2026-09/10");
+    expect(patchSplit(pooled)).toBe(
+      "补丁 14190 · 52 局 / 3 场；14188 · 31 局 / 2 场",
+    );
+  });
+  it("falls back to the exact patch for profiles outside an era or old packs", () => {
+    expect(periodLabel(profile)).toBe("版本 test");
+    expect(patchSplit(profile)).toBe("版本 test");
+  });
+  it("writes each sample's own patch into a plan draft", () => {
+    const own = { ...sample, game_version: "14188" } as LearningSample;
+    const draft = draftLearningPlan(pooled, own, [
+      {
+        id: "good",
+        player_id: "111",
+        side: "CT",
+        round_id: "m-r1",
+        time: 3,
+        kind: "smoke",
+      } as unknown as Throw,
+    ]);
+    expect(draft?.conditions).toContain("补丁 14188");
   });
 });
