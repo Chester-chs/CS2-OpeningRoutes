@@ -146,3 +146,30 @@ describe("map eras", () => {
     expect(draft?.conditions).toContain("补丁 14188");
   });
 });
+
+describe("map era fallbacks", () => {
+  it("says when a pooled profile has no per-patch counts", () => {
+    const era = {
+      id: "e",
+      label: "2026-09/10",
+      from: "2026-09-01",
+      to: "2026-10-31",
+    };
+    expect(patchSplit({ version: "e", era, patches: {} })).toBe(
+      "地图时期 2026-09/10（未记录各补丁局数）",
+    );
+  });
+  it("falls back to the profile period in plan drafts of old samples", () => {
+    const draft = draftLearningPlan(profile, sample, [
+      {
+        id: "good",
+        player_id: "111",
+        side: "CT",
+        round_id: "m-r1",
+        time: 3,
+        kind: "smoke",
+      } as unknown as Throw,
+    ]);
+    expect(draft?.conditions).toContain("版本 test");
+  });
+});

@@ -7,6 +7,8 @@ keeps its exact patch. If a real map change is confirmed inside an era, split th
 two non-overlapping ranges with new ids.
 """
 
+import re
+
 MAP_ERAS: dict[str, list[dict]] = {
     # A small A-site scaffolding change around 2026-09-22 is reported but unconfirmed.
     "de_mirage": [
@@ -15,8 +17,13 @@ MAP_ERAS: dict[str, list[dict]] = {
 }
 
 
-def era_for(map_name: str, date: str, game_version) -> dict | None:
-    """The era a game belongs to; games with an unknown date or patch never pool."""
-    if not date or not game_version:
+ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def era_for(map_name: str, date: str | None, game_version: str | None) -> dict | None:
+    """The era a game belongs to; games with an unknown or malformed date or patch never pool."""
+    day = (date or "")[:10]
+    # extract.py stores "unknown" when a demo header has no patch
+    if game_version in (None, "", "unknown") or not ISO_DAY.fullmatch(day):
         return None
-    return next((e for e in MAP_ERAS.get(map_name, []) if e["from"] <= date <= e["to"]), None)
+    return next((e for e in MAP_ERAS.get(map_name, []) if e["from"] <= day <= e["to"]), None)

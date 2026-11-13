@@ -239,8 +239,7 @@ export default function PlayerAreas({
             覆盖 {index.coverage.analyzed_rounds || 0} /{" "}
             {index.coverage.eligible_rounds || 0} 个来源已核验有效回合；
             {index.coverage.missing_rounds || 0} 个缺少区域路线，需重新导入原
-            Demo。同一地图时期内的比赛跨补丁合并统计（目前 Mirage 2026 年 9—10
-            月），档案标题下列出各补丁的局数；时期之外的比赛仍按补丁分开。
+            Demo。同一地图时期内的比赛跨补丁合并统计，档案标题下列出各补丁的局数；不在任何地图时期内的比赛仍按补丁分开。
           </p>
           <div className="learning-filters">
             <Choice

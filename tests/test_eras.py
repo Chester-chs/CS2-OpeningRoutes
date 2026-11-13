@@ -36,6 +36,10 @@ def test_era_for_needs_the_map_a_date_inside_the_period_and_a_known_patch():
     assert eras.era_for("de_mirage", "", "14190") is None
     assert eras.era_for("de_mirage", "2026-10-01", None) is None
     assert eras.era_for("de_ancient", "2026-10-01", "14190") is None
+    assert eras.era_for("de_mirage", "2026-10-31T12:00:00", "14191")["id"] == ERA
+    assert eras.era_for("de_mirage", "2026-9-15", "14181") is None
+    assert eras.era_for("de_mirage", "9/15/2026", "14181") is None
+    assert eras.era_for("de_mirage", "2026-10-01", "unknown") is None
 
 
 def test_patches_inside_the_era_pool_into_one_profile_with_the_split():

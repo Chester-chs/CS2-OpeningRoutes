@@ -174,18 +174,21 @@ export const controlNames: Record<string, string> = {
   unknown: "资料缺失",
 };
 
-export function periodLabel(p: Pick<ProfileSummary, "era" | "version">) {
+export function periodLabel(
+  p: Pick<ProfileSummary, "era" | "version">,
+): string {
   return p.era ? `地图时期 ${p.era.label}` : `版本 ${p.version}`;
 }
 
 /** Patches behind a pooled profile, most rounds first; old packs fall back to the version. */
 export function patchSplit(
   p: Pick<ProfileSummary, "era" | "version" | "patches">,
-) {
+): string {
   const rows = Object.entries(p.patches || {}).sort(
     (a, b) => b[1].rounds - a[1].rounds,
   );
-  if (!rows.length) return periodLabel(p);
+  if (!rows.length)
+    return p.era ? `${periodLabel(p)}（未记录各补丁局数）` : periodLabel(p);
   return `补丁 ${rows.map(([k, v]) => `${k} · ${v.rounds} 局 / ${v.matches} 场`).join("；")}`;
 }
 

@@ -297,6 +297,8 @@ def build(matches, timeline_loader, *, reviews=None, overrides=None, labels=None
                         )
                     }
                 )
+        # one era per match: it depends only on the map, the date and the patch
+        era = eras.era_for(map_name, match["source"].get("date", ""), match.get("game_version"))
         for original in match["rounds"]:
             row = effective_round(original, reviews.get(original["id"], {}))
             if row.get("excluded") or row.get("review_required") or not row.get("complete"):
@@ -375,7 +377,6 @@ def build(matches, timeline_loader, *, reviews=None, overrides=None, labels=None
                         selected = [e["player_id"] for e in members if e["player_id"] in g.get("players", [])]
                         if selected:
                             subjects.append(("role", gid, g["label"], team, side, gid, selected))
-                era = eras.era_for(map_name, match["source"].get("date", ""), match.get("game_version"))
                 for kind, subject, name, team, side, epoch, actors in subjects:
                     version = era["id"] if era else str(match.get("game_version") or f"unknown:{match['id']}")
                     identity = (kind, subject, map_name, version, side, area, team, epoch)

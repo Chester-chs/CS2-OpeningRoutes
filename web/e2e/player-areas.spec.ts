@@ -14,6 +14,10 @@ test("player area learning links pistol samples, whole rounds and saved practice
   await page.getByLabel("学习区域", { exact: true }).selectOption("A");
   await expect(page.getByTestId("learning-profile")).toContainText("样本");
   await expect(page.getByTestId("learning-profile")).toContainText("置信");
+  // the profile header names the patches behind its samples
+  await expect(page.getByTestId("patch-split")).toContainText(
+    /补丁 \d+ · \d+ 局/,
+  );
   await page.getByLabel("学习情境", { exact: true }).selectOption("pistol");
   await expect(page.getByTestId("learning-sample").first()).toContainText(
     "手枪局",
