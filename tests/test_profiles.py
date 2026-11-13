@@ -180,7 +180,9 @@ def test_missing_old_data_unverified_abnormal_and_excluded_rounds_never_become_c
 def test_transfers_returning_stints_versions_and_nicknames_do_not_merge():
     library, timelines = learning_fixture(4, 1)
     library[1]["rounds"][0]["equipment"][0]["team"] = "Gamma"
+    # outside the pooled map era, so the different patch keeps its own profile
     library[3]["game_version"] = "test-map-v2"
+    library[3]["source"]["date"] = "2026-11-04"
     result = build(library, timelines)
     players = [
         p

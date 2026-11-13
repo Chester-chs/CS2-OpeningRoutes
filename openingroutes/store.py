@@ -565,6 +565,7 @@ class Store:
     _learning_errors: dict = {}
 
     def _profile_key(self):
+        from . import eras
         from .profiles import HOLD_SECONDS, PROFILE_VERSION, WINDOW_SECONDS
 
         def build_key():
@@ -580,6 +581,7 @@ class Store:
                 PROFILE_VERSION,
                 HOLD_SECONDS,
                 WINDOW_SECONDS,
+                eras.MAP_ERAS,
                 sources,
                 self.all("round_reviews"),
                 self.all("places"),

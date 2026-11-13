@@ -45,7 +45,10 @@ export type ProfileSummary = {
   name: string;
   aliases: string[];
   map: string;
+  // The map era id when games are pooled across patches, otherwise the exact patch.
   version: string;
+  era?: MapEra | null;
+  patches?: Record<string, { rounds: number; matches: number }>;
   side: Side;
   area: string;
   area_label: string;
@@ -56,6 +59,7 @@ export type ProfileSummary = {
   date_from: string;
   date_to: string;
 };
+export type MapEra = { id: string; label: string; from: string; to: string };
 export type ObservedUtility = {
   id: string;
   tick: number;
@@ -89,6 +93,7 @@ export type LearningSample = {
   economy: string;
   score: string;
   date: string;
+  game_version?: string | null;
   source: { event: string; match: string; date: string; url: string };
   routes: Record<
     string,
@@ -169,6 +174,24 @@ export const controlNames: Record<string, string> = {
   unknown: "资料缺失",
 };
 
+export function periodLabel(
+  p: Pick<ProfileSummary, "era" | "version">,
+): string {
+  return p.era ? `地图时期 ${p.era.label}` : `版本 ${p.version}`;
+}
+
+/** Patches behind a pooled profile, most rounds first; old packs fall back to the version. */
+export function patchSplit(
+  p: Pick<ProfileSummary, "era" | "version" | "patches">,
+): string {
+  const rows = Object.entries(p.patches || {}).sort(
+    (a, b) => b[1].rounds - a[1].rounds,
+  );
+  if (!rows.length)
+    return p.era ? `${periodLabel(p)}（未记录各补丁局数）` : periodLabel(p);
+  return `补丁 ${rows.map(([k, v]) => `${k} · ${v.rounds} 局 / ${v.matches} 场`).join("；")}`;
+}
+
 export function sampleMatchesContext(s: LearningSample, context: string) {
   if (context === "pistol") return s.pistol;
   if (context === "non_pistol") return !s.pistol;
@@ -206,7 +229,7 @@ export function draftLearningPlan(
     source_players: sample.player_ids,
     learning_profile_id: profile.id,
     purpose: `比赛观察：${sample.source.match}，回合 ${sample.number}。战术目的与反制因果待人工核对。`,
-    conditions: `${sample.source.date}；版本 ${profile.version}；${economyNames[sample.economy] || sample.economy}；${scoreNames[sample.score] || sample.score}。冻结结束为 0 秒。`,
+    conditions: `${sample.source.date}；${sample.game_version ? `补丁 ${sample.game_version}` : periodLabel(profile)}；${economyNames[sample.economy] || sample.economy}；${scoreNames[sample.score] || sample.score}。冻结结束为 0 秒。`,
     steps: rows.map((t) => ({
       throw_id: t.id,
       role: t.player,
