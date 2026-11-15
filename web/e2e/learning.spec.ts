@@ -169,3 +169,59 @@ test("desktop studio opens from the summary and loads maps on demand", async ({
     await expect(page.locator(".pattern-card").first()).toBeVisible();
   }
 });
+
+for (const [section, heightLimit] of [
+  ["道具库", 300],
+  ["手枪局", 260],
+] as const) {
+  test(`phone ${section} keeps all filters usable in a compact panel`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await expect(page.locator('[data-ready="true"]')).toBeVisible();
+    await page
+      .getByRole("navigation", { name: "主要导航" })
+      .getByRole("button", { name: section, exact: true })
+      .click();
+    const filters = page.getByRole("region", { name: "内容筛选" });
+    const bounds = await filters.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.height).toBeLessThanOrEqual(heightLimit);
+    for (const label of [
+      "搜索选手、区域或教学",
+      "地图",
+      "阵营",
+      "选手",
+      "战队",
+      "比赛",
+      "起始日期",
+      "结束日期",
+      ...(section === "道具库"
+        ? ["道具类型", "区域", "教学状态"]
+        : ["回合结果"]),
+    ]) {
+      await expect(filters.getByLabel(label, { exact: true })).toBeVisible();
+    }
+    await filters
+      .getByLabel("地图", { exact: true })
+      .selectOption("de_ancient");
+    await filters.getByLabel("阵营", { exact: true }).selectOption("CT");
+    await expect(filters.getByLabel("地图", { exact: true })).toHaveValue(
+      "de_ancient",
+    );
+    await expect(filters.getByLabel("阵营", { exact: true })).toHaveValue(
+      "CT",
+    );
+    await filters
+      .getByRole("button", { name: "清除筛选", exact: true })
+      .click();
+    await expect(filters.getByLabel("地图", { exact: true })).toHaveValue("");
+    await expect(filters.getByLabel("阵营", { exact: true })).toHaveValue("");
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBeTruthy();
+  });
+}
