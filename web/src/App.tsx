@@ -12,6 +12,7 @@ import {
   Map as MapIcon,
   Search,
   Shield,
+  Flag,
   Swords,
   Target,
   Video,
@@ -32,6 +33,7 @@ import {
 } from "./data";
 import type { Catalog, Filters, Round, Throw } from "./types";
 import CTPatterns from "./CTPatterns";
+import OpeningsPage from "./OpeningsPage";
 import Detail from "./Detail";
 import Manage from "./Manage";
 import Plans from "./Plans";
@@ -44,6 +46,7 @@ const nav = [
   { id: "home", label: "发现", icon: Crosshair },
   { id: "learn", label: "跟着选手学", icon: Target },
   { id: "plans", label: "控图与反制", icon: MapIcon },
+  { id: "openings", label: "开局策略", icon: Flag },
   { id: "ct", label: "CT 防守研究", icon: Shield },
   { id: "pistol", label: "手枪局", icon: Swords },
   { id: "utility", label: "道具库", icon: Flame },
@@ -53,6 +56,7 @@ const nav = [
 const titles: Record<string, string> = {
   home: "从比赛里找到答案。",
   learn: "跟着选手学",
+  openings: "开局策略",
   plans: "控图与反制",
   ct: "CT 防守研究",
   pistol: "手枪局",
@@ -662,6 +666,12 @@ export default function App() {
               openRound={(id) => setDetail({ id, kind: "round" })}
               openThrow={(id) => setDetail({ id, kind: "throw" })}
               onRefresh={refresh}
+            />
+          ) : page === "openings" ? (
+            <OpeningsPage
+              client={client}
+              catalog={catalog}
+              openRound={(id) => setDetail({ id, kind: "round" })}
             />
           ) : page === "ct" ? (
             <CTPatterns

@@ -321,6 +321,18 @@ export class DataClient {
     if (!response.ok) throw new Error(`读取地图 ${map} 的资料失败。`);
     return response.json();
   }
+  async openings(map: string): Promise<import("./openings").Openings> {
+    const name = `openings/${map}.json`;
+    const response = await fetch(
+      this.mode === "desktop"
+        ? `/api/openings/${encodeURIComponent(map)}`
+        : `./content/${name}`,
+    );
+    if (!response.ok) throw new Error(`读取 ${map} 的开局分析失败。`);
+    const bytes = await response.arrayBuffer();
+    await this.verify(name, bytes);
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
   async learningIndex(): Promise<import("./learning").LearningIndex> {
     const name = "learning/index.json";
     if (this.mode === "web" && !this.files[name]) {
