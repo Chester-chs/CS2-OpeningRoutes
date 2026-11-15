@@ -1130,16 +1130,16 @@ footer span {
     font-size: 12px;
   }
   .filters {
-    padding: 12px;
-    margin-bottom: 15px;
+    padding: 8px;
+    margin-bottom: 12px;
   }
   .search-box input {
     font-size: 12px;
     padding: 10px 0;
   }
   .filter-row {
-    gap: 9px;
-    margin-top: 10px;
+    gap: 6px;
+    margin-top: 6px;
   }
   .select-label {
     flex-basis: 42%;
@@ -1147,8 +1147,10 @@ footer span {
     font-size: 11px !important;
   }
   .select-label select {
-    font-size: 11px;
-    padding: 8px 6px;
+    font-size: 12px;
+    padding: 5px 6px;
+    margin-top: 0;
+    min-height: 30px;
   }
   .date-filter input {
     width: 115px;
