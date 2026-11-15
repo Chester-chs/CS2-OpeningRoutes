@@ -35,7 +35,7 @@ export default function OpeningsPage({
         if (active) setData(d);
       })
       .catch((e) => {
-        if (active) setError((e as Error).message);
+        if (active) setError(e instanceof Error ? e.message : String(e));
       });
     return () => {
       active = false;
@@ -56,7 +56,8 @@ export default function OpeningsPage({
   const tName = (id: number | null) =>
     bucket?.t.patterns.find((p) => p.id === id)?.name ?? "未归类";
   const ctName = (id: number | null) =>
-    bucket?.ct.patterns.find((p) => p.id === id)?.name ?? "未归类";
+    bucket?.ct.patterns.find((p) => p.id === id)?.name ??
+    (id === null ? "未归类" : `阵型 ${id + 1}`);
   return (
     <section className="openings" data-testid="openings">
       <p className="notice">
@@ -70,7 +71,11 @@ export default function OpeningsPage({
           <select
             aria-label="开局地图"
             value={current}
-            onChange={(e) => setMap(e.target.value)}
+            onChange={(e) => {
+              setMap(e.target.value);
+              setBucketId("");
+              setTeam("");
+            }}
           >
             {maps.map((m) => (
               <option key={m} value={m}>
@@ -85,7 +90,10 @@ export default function OpeningsPage({
             <select
               aria-label="开局时期"
               value={bucket?.id || ""}
-              onChange={(e) => setBucketId(e.target.value)}
+              onChange={(e) => {
+                setBucketId(e.target.value);
+                setTeam("");
+              }}
             >
               {data.buckets.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -99,6 +107,9 @@ export default function OpeningsPage({
       </div>
       {error && <p className="notice">{error}</p>}
       {!data && !error && <p className="muted">正在计算开局分析…</p>}
+      {data && !bucket && (
+        <p className="notice">这张地图还没有可分析的已核验回合。</p>
+      )}
       {bucket && (
         <>
           <h2>T 方默认打法</h2>
@@ -116,11 +127,15 @@ export default function OpeningsPage({
               >
                 <h3>{p.name}</h3>
                 <p className="micro">
-                  {p.rounds} 回合 · T 胜{" "}
-                  {p.t_win_rate === null
-                    ? "—"
-                    : `${Math.round(p.t_win_rate * 100)}%`}
-                  （{p.decided} 回合已分胜负）· 20 秒常见站位：
+                  T 胜率{" "}
+                  {rateText({
+                    status: p.status,
+                    rounds: p.decided,
+                    matches: p.matches,
+                    rate: p.t_win_rate,
+                    interval: null,
+                  })}
+                  · 20 秒常见站位：
                   {p.setups.map((s) => s.setup).join(" / ")}
                 </p>
                 <ul>
@@ -139,7 +154,7 @@ export default function OpeningsPage({
                               rel="noopener noreferrer"
                             >
                               nades.ai 上的{kindNames[u.kind] || u.kind}点位{" "}
-                              <ExternalLink size={12} />
+                              <ExternalLink size={12} aria-hidden="true" />
                             </a>
                           </>
                         )}
@@ -148,7 +163,9 @@ export default function OpeningsPage({
                   })}
                 </ul>
                 <button
+                  type="button"
                   className="text-button"
+                  disabled={!p.representative}
                   onClick={() => openRound(p.representative)}
                 >
                   代表回合
@@ -159,18 +176,23 @@ export default function OpeningsPage({
           <h2>对位：T 默认打法 × CT 阵型</h2>
           <div className="table-scroll">
             <table data-testid="matchups">
+              <caption className="micro">
+                行：T 方默认打法；列：CT 防守阵型；格子：T 方胜率及 95% 区间
+              </caption>
               <thead>
                 <tr>
-                  <th>T \ CT</th>
+                  <th scope="col">T 默认打法 \ CT 阵型</th>
                   {bucket.ct.patterns.map((c) => (
-                    <th key={c.id}>{c.name || `阵型 ${c.id + 1}`}</th>
+                    <th scope="col" key={c.id}>
+                      {ctName(c.id)}
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {bucket.t.patterns.map((t) => (
                   <tr key={t.id}>
-                    <th>{t.name}</th>
+                    <th scope="row">{t.name}</th>
                     {bucket.ct.patterns.map((c) => {
                       const cell = bucket.matchups.find(
                         (m) => m.t === t.id && m.ct === c.id,
@@ -239,8 +261,10 @@ export default function OpeningsPage({
                         })}
                         {d.examples.map((id) => (
                           <button
+                            type="button"
                             key={id}
                             className="text-button"
+                            aria-label={`查看 ${side === "T" ? tName(d.label) : ctName(d.label)} 的第 ${id.split("-r").pop()} 回合`}
                             onClick={() => openRound(id)}
                           >
                             回合 {id.split("-r").pop()}

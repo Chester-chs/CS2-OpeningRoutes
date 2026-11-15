@@ -323,6 +323,10 @@ export class DataClient {
   }
   async openings(map: string): Promise<import("./openings").Openings> {
     const name = `openings/${map}.json`;
+    if (this.mode === "web" && !this.files[name])
+      throw new Error(
+        "此内容包不含这张地图的开局分析，请用新版桌面端重新导出。",
+      );
     const response = await fetch(
       this.mode === "desktop"
         ? `/api/openings/${encodeURIComponent(map)}`

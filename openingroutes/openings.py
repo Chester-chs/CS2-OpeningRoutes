@@ -117,17 +117,22 @@ def cluster_t(map_name, formations, throws, overrides=None, *, min_cluster=3, ma
         rep = members[int(((x[idx] - centre) ** 2).sum(1).argmin())]
         decided = [f for f in members if f.get("winner") in ("CT", "T")]
         wins = sum(f["winner"] == "T" for f in decided)
+        matches = len({f["round_id"].rsplit("-r", 1)[0] for f in members})
+        enough = len(decided) >= MIN_ROUNDS and matches >= MIN_MATCHES
         timing = defaultdict(list)
         for f in members:
             for t in early[f["round_id"]]:
-                timing[(t["kind"], t.get("effect_area") or "未知")].append(float(t["time"]))
+                if t.get("kind"):
+                    timing[(t["kind"], t.get("effect_area") or "未知")].append(float(t["time"]))
         result["patterns"].append(
             {
                 "id": c,
                 "rounds": len(members),
+                "matches": matches,
                 "decided": len(decided),
                 "t_wins": wins,
-                "t_win_rate": round(wins / len(decided), 3) if decided else None,
+                "status": "ok" if enough else "insufficient",
+                "t_win_rate": round(wins / len(decided), 3) if enough else None,
                 "shares": {
                     second: {a: round(sum(counts[i][j][a] for i in idx) / (5 * len(idx)), 3) for a in T_AREAS}
                     for j, second in enumerate(T_SNAPSHOT_SECONDS)
@@ -153,7 +158,7 @@ def first_contact(row, tick_rate):
     """The first damage between the two sides: when (seconds after freeze end), where, by whom."""
     for e in sorted(row.get("learning_events") or [], key=lambda e: e.get("tick", 0)):
         a, v = e.get("attacker_side"), e.get("victim_side")
-        if e.get("kind") == "hurt" and a and v and a != v:
+        if e.get("kind") == "hurt" and a and v and a != v and e.get("tick") is not None:
             second = round((e["tick"] - row.get("freeze_end_tick", 0)) / tick_rate, 2)
             return {"second": second, "place": e.get("victim_place"), "by": a}
     return None
@@ -179,7 +184,8 @@ def _gated(rows, side, min_rounds, min_matches):
     decided = [r for r in rows if r["winner"] in ("CT", "T")]
     wins = sum(r["winner"] == side for r in decided)
     matches = len({r["match_id"] for r in rows})
-    enough = len(rows) >= min_rounds and matches >= min_matches and decided
+    decided_matches = len({r["match_id"] for r in decided})
+    enough = len(decided) >= min_rounds and decided_matches >= min_matches
     return {
         "rounds": len(rows),
         "matches": matches,
@@ -224,7 +230,7 @@ def matchup_table(rows, *, min_rounds=MIN_ROUNDS, min_matches=MIN_MATCHES):
     return sorted(out, key=lambda c: (-c["rounds"], str(c["t"]), str(c["ct"])))
 
 
-def _side_scout(rows, side, label_key, team_key, opponent_key, min_rounds, min_matches):
+def _side_scout(rows, side, label_key, opponent_key, min_rounds, min_matches):
     by_label = defaultdict(list)
     for r in rows:
         by_label[r[label_key]].append(r)
@@ -242,12 +248,17 @@ def _side_scout(rows, side, label_key, team_key, opponent_key, min_rounds, min_m
         "rounds": len(rows),
         "matches": len({r["match_id"] for r in rows}),
         "defaults": defaults,
-        "opponents": dict(Counter(r[opponent_key] for r in rows)),
+        "opponents": dict(Counter(r[opponent_key] for r in rows if r[opponent_key])),
+        # string keys, so the in-memory and the cached (JSON) results look the same
         "by_month": {
-            month: dict(Counter(r[label_key] for r in rows if r["date"][:7] == month))
+            month: dict(Counter(_key(r[label_key]) for r in rows if r["date"][:7] == month))
             for month in sorted({r["date"][:7] for r in rows})
         },
     }
+
+
+def _key(label):
+    return "unlabelled" if label is None else str(label)
 
 
 def team_scout(rows, team, *, min_rounds=MIN_ROUNDS, min_matches=MIN_MATCHES):
@@ -256,7 +267,6 @@ def team_scout(rows, team, *, min_rounds=MIN_ROUNDS, min_matches=MIN_MATCHES):
             [r for r in rows if r["t_team"] == team],
             "T",
             "t_label",
-            "t_team",
             "ct_team",
             min_rounds,
             min_matches,
@@ -265,7 +275,6 @@ def team_scout(rows, team, *, min_rounds=MIN_ROUNDS, min_matches=MIN_MATCHES):
             [r for r in rows if r["ct_team"] == team],
             "CT",
             "ct_label",
-            "ct_team",
             "t_team",
             min_rounds,
             min_matches,
@@ -314,7 +323,7 @@ def build(
                 {
                     "round_id": row["id"],
                     "match_id": match["id"],
-                    "version": str(version),
+                    "version": str(version or "unknown"),
                     "date": date,
                     "winner": row.get("winner"),
                     "t_team": f.get("t_team"),

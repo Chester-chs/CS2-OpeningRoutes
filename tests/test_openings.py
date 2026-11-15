@@ -268,3 +268,27 @@ def test_export_writes_verified_openings_without_round_lists(tmp_path):
             assert all(
                 e in rounds for side in scout.values() for d in side["defaults"] for e in d["examples"]
             )
+
+
+def test_rates_need_enough_decided_rounds_not_just_rounds():
+    rows = matchup_rounds({(0, 1): (12, 4, 2)})
+    for row in rows[2:]:
+        row["winner"] = None  # undecided rounds count as samples but not toward a rate
+    [cell] = openings.matchup_table(rows, min_rounds=10, min_matches=3)
+    assert cell["rounds"] == 12 and cell["decided"] == 2
+    assert cell["status"] == "insufficient" and cell["t_win_rate"] is None
+
+
+def test_t_default_cards_hide_rates_below_the_minimum():
+    result = openings.cluster_t("de_mirage", library(matches=2, per_plan=3), [], min_cluster=3, max_k=2)
+    assert all(p["t_win_rate"] is None and p["status"] == "insufficient" for p in result["patterns"])
+    assert all(p["matches"] == 2 for p in result["patterns"])
+
+
+def test_the_cache_key_follows_the_ct_analysis_version(tmp_path, monkeypatch):
+    from openingroutes import patterns
+
+    store = seed_openings(tmp_path)
+    first = store._openings_key()
+    monkeypatch.setattr(patterns, "ANALYSIS_VERSION", patterns.ANALYSIS_VERSION + 1)
+    assert store._openings_key() != first

@@ -18,6 +18,9 @@ describe("nades.ai links", () => {
     expect(nadesLink("de_mirage", "flash")).toBe(
       "https://nades.ai/zh/mirage/flashbangs",
     );
+    expect(nadesLink("de_mirage", "molotov")).toBe(
+      "https://nades.ai/zh/mirage/molotovs",
+    );
   });
   it("never builds a link for unknown maps or grenades", () => {
     expect(nadesLink("de_train", "smoke")).toBeNull();
@@ -61,5 +64,18 @@ describe("desktop openings request", () => {
     c.mode = "desktop";
     expect((await c.openings("de_mirage")).map).toBe("de_mirage");
     expect(fetcher.mock.calls[0][0]).toBe("/api/openings/de_mirage");
+  });
+});
+
+describe("static openings", () => {
+  it("explains when an older content pack has no openings", async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    const c = new DataClient();
+    c.files = { "catalog.json": "x" };
+    await expect(c.openings("de_mirage")).rejects.toThrow(
+      "不含这张地图的开局分析",
+    );
+    expect(fetcher).not.toHaveBeenCalled();
   });
 });

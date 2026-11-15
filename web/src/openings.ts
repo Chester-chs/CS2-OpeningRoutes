@@ -12,8 +12,10 @@ export type TDefault = {
   id: number;
   name: string;
   rounds: number;
+  matches: number;
   decided: number;
   t_wins: number;
+  status: "ok" | "insufficient";
   t_win_rate: number | null;
   shares: Record<string, Record<string, number>>;
   setups: { setup: string; rounds: number }[];
