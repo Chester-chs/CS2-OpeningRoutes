@@ -3,6 +3,7 @@
 import gzip
 import hashlib
 import json
+import os
 import re
 import sqlite3
 import threading
@@ -444,6 +445,67 @@ class Store:
                 list(self.all("matches").values()), rounds_by_id, self.catalog()["throws"]
             )
         return result.get(map_name)
+
+    _openings_memory: dict = {}
+
+    def _openings_key(self):
+        """The learning key covers sources, revisions, reviews, area labels and map eras; the CT
+        analysis version and the T snapshot clock decide which labels the openings pair."""
+        import hashlib
+
+        from . import openings as O
+        from .formations import T_SNAPSHOT_SECONDS
+        from .patterns import ANALYSIS_VERSION
+
+        inputs = [O.OPENINGS_VERSION, ANALYSIS_VERSION, list(T_SNAPSHOT_SECONDS), self._profile_key()]
+        return hashlib.sha256(json.dumps(inputs).encode()).hexdigest()
+
+    def openings(self, map_name):
+        """T defaults x CT setups for one map, cached on disk until the library inputs change.
+
+        The returned dict is shared with the in-process cache: callers must not modify it."""
+        import hashlib
+
+        from . import openings as O
+
+        if not self._map_matches(map_name):
+            return None
+        key = self._openings_key()
+        memory_key = (str(self.db.resolve()), map_name)
+        cached = Store._openings_memory.get(memory_key)
+        if cached and cached[0] == key:
+            return cached[1]
+        disk = self.root / "cache" / "openings" / f"{hashlib.sha256(map_name.encode()).hexdigest()[:12]}.json"
+        try:
+            stored = json.loads(disk.read_text(encoding="utf-8"))
+            if stored.get("key") == key:
+                Store._openings_memory[memory_key] = (key, stored["data"])
+                return stored["data"]
+        except (OSError, ValueError, AttributeError, KeyError, TypeError):
+            pass  # a missing or damaged cache file is rebuilt
+        reviews = self.all("round_reviews")
+        data = json.loads(
+            json.dumps(
+                _finite(
+                    O.build(
+                        map_name,
+                        self._map_matches(map_name),
+                        self._ct_for_map(map_name, reviews),
+                        reviews=reviews,
+                        overrides=self.place_overrides("area"),
+                    )
+                )
+            )
+        )
+        Store._openings_memory[memory_key] = (key, data)
+        try:
+            disk.parent.mkdir(parents=True, exist_ok=True)
+            tmp = disk.with_suffix(f".{os.getpid()}.tmp")
+            tmp.write_text(json.dumps({"key": key, "data": data}, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(disk)
+        except OSError:
+            pass
+        return data
 
     def map_variants(self, map_name, throws, decisions, protected):
         """One map's variant groups and matched misthrow rules, cached on disk on their inputs."""

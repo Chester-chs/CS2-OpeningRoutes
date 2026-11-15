@@ -195,6 +195,15 @@ def create_app(root: Path, *, testing=False, web_root: Path | None = None):
     def catalog_summary():
         return encoded(store.summary())
 
+    @app.get("/api/openings/{map_name}")
+    def map_openings(map_name: str):
+        if not re.fullmatch(MAP, map_name):
+            raise HTTPException(422, "Invalid map")
+        data = store.openings(map_name)
+        if data is None:
+            raise HTTPException(404, "Map not found")
+        return encoded(data)
+
     @app.get("/api/learning")
     def learning_index():
         return encoded(store.learning_index())
