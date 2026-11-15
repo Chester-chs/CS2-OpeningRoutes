@@ -189,3 +189,42 @@ def test_build_pools_the_era_across_patches_and_scouts_each_team():
     assert sum(d["rounds"] for d in scout["T"]["defaults"]) == 12
     assert all(len(d["examples"]) <= 3 for d in scout["T"]["defaults"])
     assert scout["T"]["opponents"] == {"Beta": 12}
+
+
+def seed_openings(root):
+    from openingroutes.store import Store
+
+    matches, _ = era_library()
+    store = Store(root)
+    for m in matches:
+        store.save_match({**m, "throws": [], "warnings": [], "sha256": m["id"], "learning_version": 1})
+    return store
+
+
+def test_store_caches_openings_until_the_library_changes(tmp_path, monkeypatch):
+    store = seed_openings(tmp_path)
+    calls = []
+    real = openings.build
+    monkeypatch.setattr(openings, "build", lambda *a, **k: calls.append(1) or real(*a, **k))
+    first = store.openings("de_mirage")
+    assert first["map"] == "de_mirage" and first["buckets"]
+    assert all("rows" not in b for b in first["buckets"])
+    store.openings("de_mirage")
+    assert len(calls) == 1
+    store.put("round_reviews", "m0-r0", {"resolution": "excluded"})
+    store.openings("de_mirage")
+    assert len(calls) == 2
+    assert store.openings("de_missing") is None
+
+
+def test_openings_api_serves_one_map_and_validates_the_name(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from openingroutes.api import create_app
+
+    seed_openings(tmp_path)
+    client = TestClient(create_app(tmp_path, testing=True))
+    body = client.get("/api/openings/de_mirage").json()
+    assert body["map"] == "de_mirage" and body["buckets"][0]["matchups"]
+    assert client.get("/api/openings/de_missing").status_code == 404
+    assert client.get("/api/openings/DE%20MIRAGE").status_code == 422
