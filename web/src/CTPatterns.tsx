@@ -176,9 +176,8 @@ export default function CTPatterns({
           跟着本图 CT 选手学
         </button>
       )}
-      <p className="muted">
-        按论文 TAGNet 的流程，从职业 CT 回合的 10/12/15/18/20
-        秒站位归纳防守阵型，并进一步学习每支战队、每名选手的习惯站位。
+      <p className="hint">
+        按 TAGNet 流程，用 CT 回合 10/12/15/18/20 秒站位归纳防守阵型。
       </p>
       {maps.length > 0 && (
         <div className="chips map-chips" role="tablist" aria-label="选择地图">

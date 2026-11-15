@@ -2,20 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownToLine,
   ArrowRight,
-  Bookmark,
-  CheckCircle2,
-  Crosshair,
-  Database,
-  ExternalLink,
-  Flame,
   GitCompareArrows,
-  Map as MapIcon,
   Search,
-  Shield,
-  Flag,
-  Swords,
   Target,
-  Video,
 } from "lucide-react";
 import {
   areaOptions,
@@ -39,22 +28,23 @@ import Manage from "./Manage";
 import Plans from "./Plans";
 import Timeline from "./Timeline";
 import PlayerAreas, { PracticeShelf } from "./PlayerAreas";
+import HomePage from "./HomePage";
 import { loadPractice } from "./learning";
 import type { LearningSelection } from "./learning";
 
 const nav = [
-  { id: "home", label: "发现", icon: Crosshair },
-  { id: "learn", label: "跟着选手学", icon: Target },
-  { id: "plans", label: "控图与反制", icon: MapIcon },
-  { id: "openings", label: "开局策略", icon: Flag },
-  { id: "ct", label: "CT 防守研究", icon: Shield },
-  { id: "pistol", label: "手枪局", icon: Swords },
-  { id: "utility", label: "道具库", icon: Flame },
-  { id: "pro", label: "职业案例", icon: Video },
-  { id: "saved", label: "我的收藏", icon: Bookmark },
+  { id: "home", label: "发现" },
+  { id: "learn", label: "跟着选手学" },
+  { id: "plans", label: "控图与反制" },
+  { id: "openings", label: "开局策略" },
+  { id: "ct", label: "CT 防守研究" },
+  { id: "pistol", label: "手枪局" },
+  { id: "utility", label: "道具库" },
+  { id: "pro", label: "职业案例" },
+  { id: "saved", label: "我的收藏" },
 ];
 const titles: Record<string, string> = {
-  home: "从比赛里找到答案。",
+  home: "发现",
   learn: "跟着选手学",
   openings: "开局策略",
   plans: "控图与反制",
@@ -246,14 +236,6 @@ export default function App() {
       .filter(Boolean)
       .sort();
   const maps = [...new Set(catalog.matches.map((m) => m.map))].sort();
-  const complete = catalog.maps
-    ? catalog.maps.reduce((n, m) => n + m.complete, 0)
-    : catalog.throws.filter(
-        (t) => t.gaps.length === 0 && t.teaching.status === "published",
-      ).length;
-  const totalThrows = catalog.maps
-    ? catalog.maps.reduce((n, m) => n + m.throws, 0)
-    : catalog.throws.length;
   const detailReady =
     !detail ||
     (detail.kind === "throw"
@@ -267,7 +249,6 @@ export default function App() {
                 catalog.rounds.find((r) => r.id === detail.id)?.match_id,
             )?.map || "",
           )));
-  const verifiedMatches = catalog.matches.filter((m) => m.source.verified);
   const isRounds = page === "pistol" || page === "pro";
   const gear = new Map<string, number>();
   if (page === "pistol")
@@ -370,17 +351,8 @@ export default function App() {
           aria-label="返回发现"
           onClick={() => navigate("home")}
         >
-          <span className="brand-mark">
-            <Crosshair size={24} />
-          </span>
-          <span>
-            OPENING
-            <span className="brand-bottom">
-              ROUTES <small>CS2</small>
-            </span>
-          </span>
+          OpeningRoutes <small>CS2</small>
         </button>
-        <p className="nav-caption">学习工作台</p>
         <nav aria-label="主要导航">
           {nav.map((n) => (
             <button
@@ -389,7 +361,6 @@ export default function App() {
               className={page === n.id ? "nav-item active" : "nav-item"}
               onClick={() => navigate(n.id)}
             >
-              <n.icon size={18} />
               <span>{n.label}</span>
               {n.id === "saved" && favorites.length > 0 && (
                 <small>{favorites.length}</small>
@@ -404,13 +375,11 @@ export default function App() {
               className={page === "manage" ? "nav-item active" : "nav-item"}
               onClick={() => navigate("manage")}
             >
-              <Database size={18} />
               <span>数据与内容管理</span>
             </button>
           </div>
         )}
         <div className="sidebar-foot">
-          <span className="live-dot" />
           <span>
             {client.mode === "desktop"
               ? "本地资料库"
@@ -422,123 +391,10 @@ export default function App() {
         </div>
       </aside>
       <div className="workspace">
-        <header className="topbar">
-          <div className="breadcrumb">
-            OPENINGROUTES <span>/</span> {titles[page]}
-          </div>
-          <span className="top-badge">
-            <Shield size={13} />
-            职业比赛依据
-          </span>
-        </header>
         <main>
-          {page === "home" ? (
-            <section className="hero">
-              <div className="hero-copy">
-                <p className="eyebrow">
-                  <span className="live-dot" /> PRO DEMO. REAL CONTEXT.
-                </p>
-                <h1>
-                  从比赛里
-                  <br />
-                  找到答案。
-                </h1>
-                <p>
-                  跟着职业选手或战队，学一块区域怎么打。
-                  <br />
-                  从开局路线、时机与对抗，走到完整回合和跟练。
-                </p>
-                <button className="button" onClick={() => openLearning({})}>
-                  跟着选手学 <ArrowRight size={17} />
-                </button>
-                <button
-                  className="text-button light"
-                  onClick={() => navigate("pistol")}
-                >
-                  研究手枪局 ↗
-                </button>
-              </div>
-              <div className="hero-art" aria-hidden="true">
-                <svg viewBox="0 0 440 330">
-                  <defs>
-                    <pattern
-                      id="hero-grid"
-                      width="28"
-                      height="28"
-                      patternUnits="userSpaceOnUse"
-                    >
-                      <path
-                        d="M28 0H0V28"
-                        fill="none"
-                        stroke="#35554a"
-                        strokeWidth=".6"
-                      />
-                    </pattern>
-                  </defs>
-                  <rect width="440" height="330" fill="url(#hero-grid)" />
-                  <path
-                    d="M48 260V196H132V120H220V58H372V139H286V222H213V281H113"
-                    fill="#294338"
-                    stroke="#668477"
-                    strokeWidth="1"
-                  />
-                  <path
-                    d="M77 245Q107 175 159 156T294 90"
-                    stroke="#a6d8b0"
-                    fill="none"
-                    strokeWidth="2"
-                    strokeDasharray="6 7"
-                  />
-                  <circle cx="77" cy="245" r="7" fill="#e1b85d" />
-                  <circle
-                    cx="294"
-                    cy="90"
-                    r="35"
-                    fill="#b1dfba"
-                    opacity=".08"
-                  />
-                  <circle
-                    cx="294"
-                    cy="90"
-                    r="20"
-                    fill="none"
-                    stroke="#b1dfba"
-                    opacity=".4"
-                  />
-                  <circle cx="294" cy="90" r="5" fill="#b1dfba" />
-                  <text x="64" y="277" fill="#e1b85d" fontSize="11">
-                    POSITION
-                  </text>
-                  <text x="320" y="95" fill="#b1dfba" fontSize="11">
-                    CONTROL
-                  </text>
-                  <text x="205" y="315" fill="#759183" fontSize="10">
-                    READ THE PLAY. LEARN THE DETAILS.
-                  </text>
-                </svg>
-                <div className="art-label">
-                  <Target size={17} />
-                  一个人，一块区域，完整回合。
-                </div>
-              </div>
-            </section>
-          ) : (
-            <div className="page-title">
-              <p className="eyebrow">OPENINGROUTES / LEARNING LIBRARY</p>
-              <h1>{titles[page]}</h1>
-              <p className="muted">
-                {page === "pistol"
-                  ? "独立研究正式手枪局，比较双方的装备、路线与结果。"
-                  : page === "utility"
-                    ? "从职业比赛提取的真实投掷，逐条整理成可复现教学。"
-                    : page === "pro"
-                      ? "结合全回合路线，理解职业选手的选择与后续行动。"
-                      : page === "saved"
-                        ? "收藏和练习笔记保存在本机浏览器。"
-                        : ""}
-              </p>
-            </div>
-          )}
+          <div className="page-title">
+            <h1>{titles[page]}</h1>
+          </div>
           {loading && (
             <p role="status" className="notice">
               正在读取学习资料…
@@ -546,6 +402,7 @@ export default function App() {
           )}
           {client.mode === "desktop" &&
             catalog.maps &&
+            page !== "home" &&
             page !== "manage" &&
             page !== "learn" && (
               <MapLoader
@@ -571,86 +428,17 @@ export default function App() {
               </button>
             </div>
           )}
-          {page === "home" && (
-            <>
-              <div className="stats">
-                <Stat
-                  label="已导入比赛地图"
-                  value={catalog.matches.length}
-                  detail={`${verifiedMatches.length} 份来源已核对`}
-                />
-                <Stat
-                  label="真实投掷记录"
-                  value={totalThrows}
-                  detail="保留选手、回合与出手依据"
-                />
-                <Stat
-                  label="正式手枪局"
-                  value={
-                    catalog.rounds.filter(
-                      (r) =>
-                        r.is_pistol &&
-                        verifiedMatches.some((m) => m.id === r.match_id),
-                    ).length
-                  }
-                  detail="胜负案例共同保留"
-                />
-                <Stat
-                  label="完整教学"
-                  value={complete}
-                  detail="通过来源与复现检查"
-                />
-              </div>
-              <div className="section-line">
-                <h2>选择你的学习起点</h2>
-                <span className="micro">以比赛为依据 · 以复现为目标</span>
-              </div>
-              <div className="entry-grid">
-                {[
-                  {
-                    id: "learn",
-                    icon: Target,
-                    title: "跟着选手学",
-                    copy: "从人和位置进入，比较默认路线、时机与情境变化。",
-                  },
-                  {
-                    id: "pistol",
-                    icon: Swords,
-                    title: "研究手枪局",
-                    copy: "看装备怎么分、队伍怎么展开，如何赢下第一局。",
-                  },
-                  {
-                    id: "plans",
-                    icon: MapIcon,
-                    title: "整理控图方案",
-                    copy: "把真实回合串成方案，接上已有教学与复现跟练。",
-                  },
-                ].map((entry) => (
-                  <button
-                    className="entry"
-                    key={entry.id}
-                    onClick={() => navigate(entry.id)}
-                  >
-                    <entry.icon size={23} />
-                    <h3>{entry.title}</h3>
-                    <p>{entry.copy}</p>
-                    <ArrowRight size={17} />
-                  </button>
-                ))}
-              </div>
-              <Coverage catalog={catalog} />
-              <div className="section-line">
-                <h2>最近提取的道具</h2>
-                <button
-                  className="text-button"
-                  onClick={() => navigate("utility")}
-                >
-                  查看全部 <ArrowRight size={14} />
-                </button>
-              </div>
-            </>
-          )}
-          {page === "manage" ? (
+          {page === "home" ? (
+            <HomePage
+              catalog={catalog}
+              navigate={navigate}
+              openLearning={() => openLearning({})}
+              openMap={(map) => {
+                setFilters({ map });
+                navigate("utility");
+              }}
+            />
+          ) : page === "manage" ? (
             <Manage
               client={client}
               catalog={catalog}
@@ -692,136 +480,134 @@ export default function App() {
             />
           ) : (
             <>
-              {page !== "home" && (
-                <section className="filters" aria-label="内容筛选">
-                  <div className="search-box">
-                    <Search size={17} />
-                    <input
-                      aria-label="搜索选手、区域或教学"
-                      placeholder="搜索选手、区域或教学…"
-                      value={filters.query || ""}
-                      onChange={(e) => update("query", e.target.value)}
-                    />
-                  </div>
-                  <div className="filter-row">
+              <section className="filters" aria-label="内容筛选">
+                <div className="search-box">
+                  <Search size={17} />
+                  <input
+                    aria-label="搜索选手、区域或教学"
+                    placeholder="搜索选手、区域或教学…"
+                    value={filters.query || ""}
+                    onChange={(e) => update("query", e.target.value)}
+                  />
+                </div>
+                <div className="filter-row">
+                  <Select
+                    label="地图"
+                    value={filters.map}
+                    options={maps.map((m) => [m, m.replace("de_", "")])}
+                    change={(v) => update("map", v)}
+                  />
+                  <Select
+                    label="阵营"
+                    value={filters.side}
+                    options={["CT", "T"].map((s) => [s, s])}
+                    change={(v) => update("side", v)}
+                  />
+                  {!isRounds && (
                     <Select
-                      label="地图"
-                      value={filters.map}
-                      options={maps.map((m) => [m, m.replace("de_", "")])}
-                      change={(v) => update("map", v)}
+                      label="道具类型"
+                      value={filters.kind}
+                      options={Object.entries(kindNames)}
+                      change={(v) => update("kind", v)}
                     />
+                  )}
+                  {!isRounds && (
                     <Select
-                      label="阵营"
-                      value={filters.side}
-                      options={["CT", "T"].map((s) => [s, s])}
-                      change={(v) => update("side", v)}
-                    />
-                    {!isRounds && (
-                      <Select
-                        label="道具类型"
-                        value={filters.kind}
-                        options={Object.entries(kindNames)}
-                        change={(v) => update("kind", v)}
-                      />
-                    )}
-                    {!isRounds && (
-                      <Select
-                        label="区域"
-                        value={filters.area}
-                        options={areaOptions(catalog, filters.map).map((a) => [
-                          a,
-                          a,
-                        ])}
-                        change={(v) => update("area", v)}
-                      />
-                    )}
-                    <Select
-                      label="选手"
-                      value={filters.player}
-                      options={unique("player").map((p) => [p, p])}
-                      change={(v) => update("player", v)}
-                    />
-                    <Select
-                      label="战队"
-                      value={filters.team}
-                      options={unique("team").map((p) => [p, p])}
-                      change={(v) => update("team", v)}
-                    />
-                    <Select
-                      label="比赛"
-                      value={filters.match}
-                      options={catalog.matches.map((m) => [
-                        m.id,
-                        `${m.source.date} ${m.map.replace("de_", "")} ${m.source.match}`,
+                      label="区域"
+                      value={filters.area}
+                      options={areaOptions(catalog, filters.map).map((a) => [
+                        a,
+                        a,
                       ])}
-                      change={(v) => update("match", v)}
+                      change={(v) => update("area", v)}
                     />
-                  </div>
-                  <div className="filter-row">
-                    <label className="date-filter">
-                      从
-                      <input
-                        aria-label="起始日期"
-                        type="date"
-                        value={filters.dateFrom || ""}
-                        onChange={(e) => update("dateFrom", e.target.value)}
-                      />
-                    </label>
-                    <label className="date-filter">
-                      至
-                      <input
-                        aria-label="结束日期"
-                        type="date"
-                        value={filters.dateTo || ""}
-                        onChange={(e) => update("dateTo", e.target.value)}
-                      />
-                    </label>
-                    {page === "pistol" ? (
+                  )}
+                  <Select
+                    label="选手"
+                    value={filters.player}
+                    options={unique("player").map((p) => [p, p])}
+                    change={(v) => update("player", v)}
+                  />
+                  <Select
+                    label="战队"
+                    value={filters.team}
+                    options={unique("team").map((p) => [p, p])}
+                    change={(v) => update("team", v)}
+                  />
+                  <Select
+                    label="比赛"
+                    value={filters.match}
+                    options={catalog.matches.map((m) => [
+                      m.id,
+                      `${m.source.date} ${m.map.replace("de_", "")} ${m.source.match}`,
+                    ])}
+                    change={(v) => update("match", v)}
+                  />
+                </div>
+                <div className="filter-row">
+                  <label className="date-filter">
+                    从
+                    <input
+                      aria-label="起始日期"
+                      type="date"
+                      value={filters.dateFrom || ""}
+                      onChange={(e) => update("dateFrom", e.target.value)}
+                    />
+                  </label>
+                  <label className="date-filter">
+                    至
+                    <input
+                      aria-label="结束日期"
+                      type="date"
+                      value={filters.dateTo || ""}
+                      onChange={(e) => update("dateTo", e.target.value)}
+                    />
+                  </label>
+                  {page === "pistol" ? (
+                    <Select
+                      label="回合结果"
+                      value={filters.result}
+                      options={
+                        filters.side
+                          ? [
+                              ["win", "胜利"],
+                              ["loss", "失利"],
+                            ]
+                          : [
+                              ["T", "T 获胜"],
+                              ["CT", "CT 获胜"],
+                            ]
+                      }
+                      change={(v) => update("result", v)}
+                    />
+                  ) : (
+                    !isRounds && (
                       <Select
-                        label="回合结果"
-                        value={filters.result}
-                        options={
-                          filters.side
-                            ? [
-                                ["win", "胜利"],
-                                ["loss", "失利"],
-                              ]
-                            : [
-                                ["T", "T 获胜"],
-                                ["CT", "CT 获胜"],
-                              ]
-                        }
-                        change={(v) => update("result", v)}
+                        label="教学状态"
+                        value={filters.status}
+                        options={[
+                          ["complete", "资料齐全"],
+                          ["pending", "教学待完善"],
+                          // Only the studio keeps misthrows; exports leave them out.
+                          ...(client.mode === "desktop"
+                            ? [["misthrow", "已标为失误"]]
+                            : []),
+                        ]}
+                        change={(v) => update("status", v)}
                       />
-                    ) : (
-                      !isRounds && (
-                        <Select
-                          label="教学状态"
-                          value={filters.status}
-                          options={[
-                            ["complete", "资料齐全"],
-                            ["pending", "教学待完善"],
-                            // Only the studio keeps misthrows; exports leave them out.
-                            ...(client.mode === "desktop"
-                              ? [["misthrow", "已标为失误"]]
-                              : []),
-                          ]}
-                          change={(v) => update("status", v)}
-                        />
-                      )
-                    )}
-                    <button
-                      className="text-button"
-                      onClick={() => {
-                        setFilters({});
-                        setLimit(24);
-                      }}
-                    >
-                      清除筛选
-                    </button>
-                  </div>
-                </section>
-              )}
+                    )
+                  )}
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      setFilters({});
+                      setLimit(24);
+                    }}
+                  >
+                    清除筛选
+                  </button>
+                </div>
+              </section>
               {page === "pistol" && (
                 <>
                   <button
@@ -915,18 +701,16 @@ export default function App() {
                   {storageMessage}
                 </p>
               )}
-              {page !== "home" && (
-                <div className="section-line results">
-                  <p>
-                    {isRounds ? "回合" : "道具"}{" "}
-                    <strong>{isRounds ? rounds.length : throws.length}</strong>{" "}
-                    条{page === "saved" && ` · 已收藏回合 ${rounds.length} 个`}
-                  </p>
-                  {!isRounds && page !== "saved" && (
-                    <span className="micro">勾选两条记录可对比</span>
-                  )}
-                </div>
-              )}
+              <div className="section-line results">
+                <p>
+                  {isRounds ? "回合" : "道具"}{" "}
+                  <strong>{isRounds ? rounds.length : throws.length}</strong> 条
+                  {page === "saved" && ` · 已收藏回合 ${rounds.length} 个`}
+                </p>
+                {!isRounds && page !== "saved" && (
+                  <span className="micro">勾选两条记录可对比</span>
+                )}
+              </div>
               {showCompare && compare.length === 2 && (
                 <section className="compare-panel">
                   <div className="section-line">
@@ -983,31 +767,29 @@ export default function App() {
                 </div>
               ) : (
                 <div className="card-grid">
-                  {throws.slice(0, page === "home" ? 6 : limit).map((t) => (
+                  {throws.slice(0, limit).map((t) => (
                     <article className="throw-item" key={t.id}>
                       <ThrowCard
                         row={t}
                         onOpen={() => setDetail({ id: t.id, kind: "throw" })}
                       />
-                      {page !== "home" && (
-                        <label className="compare-check">
-                          <input
-                            type="checkbox"
-                            aria-label={`对比 ${t.player} 第${t.round_number}回合 ${t.tick}`}
-                            checked={compare.includes(t.id)}
-                            onChange={() =>
-                              setCompare((v) =>
-                                v.includes(t.id)
-                                  ? v.filter((id) => id !== t.id)
-                                  : v.length < 2
-                                    ? [...v, t.id]
-                                    : [v[1], t.id],
-                              )
-                            }
-                          />
-                          加入对比
-                        </label>
-                      )}
+                      <label className="compare-check">
+                        <input
+                          type="checkbox"
+                          aria-label={`对比 ${t.player} 第${t.round_number}回合 ${t.tick}`}
+                          checked={compare.includes(t.id)}
+                          onChange={() =>
+                            setCompare((v) =>
+                              v.includes(t.id)
+                                ? v.filter((id) => id !== t.id)
+                                : v.length < 2
+                                  ? [...v, t.id]
+                                  : [v[1], t.id],
+                            )
+                          }
+                        />
+                        加入对比
+                      </label>
                     </article>
                   ))}
                 </div>
@@ -1048,16 +830,15 @@ export default function App() {
                     )}
                   </div>
                 )}
-              {page !== "home" &&
-                (isRounds ? rounds.length : throws.length) > limit && (
-                  <button
-                    className="button secondary load-more"
-                    onClick={() => setLimit((n) => n + 24)}
-                  >
-                    加载更多（已展示 {limit} /{" "}
-                    {isRounds ? rounds.length : throws.length}）
-                  </button>
-                )}
+              {(isRounds ? rounds.length : throws.length) > limit && (
+                <button
+                  className="button secondary load-more"
+                  onClick={() => setLimit((n) => n + 24)}
+                >
+                  加载更多（已展示 {limit} /{" "}
+                  {isRounds ? rounds.length : throws.length}）
+                </button>
+              )}
               {compare.length === 2 && (
                 <div className="compare-bar">
                   <GitCompareArrows size={18} />
@@ -1084,10 +865,7 @@ export default function App() {
               )}
             </>
           )}
-          <footer>
-            OPENINGROUTES <span>观察比赛 · 理解选择 · 复现练习</span>
-            <small>原始事实与教学解释分别核验</small>
-          </footer>
+          <footer>原始事实与教学解释分别核验</footer>
         </main>
       </div>
       {detail && detailReady && (
@@ -1261,66 +1039,43 @@ function ThrowCard({ row: t, onOpen }: { row: Throw; onOpen: () => void }) {
     .join(" ");
   return (
     <button data-testid="throw-card" className="throw-card" onClick={onOpen}>
-      <div className={`card-visual ${t.kind}`}>
-        <span className="map-label">
-          {t.map.replace("de_", "").toUpperCase()}
-        </span>
-        <span className={`side ${t.side}`}>{t.side}</span>
-        <svg viewBox="0 0 310 120" aria-hidden="true">
-          <path
-            d="M0 30H310M0 60H310M0 90H310M40 0V120M100 0V120M160 0V120M220 0V120M280 0V120"
+      <svg
+        className={`throw-thumb ${t.kind}`}
+        viewBox="0 0 310 120"
+        aria-hidden="true"
+      >
+        {points.length > 0 ? (
+          <polyline
+            points={plot}
             stroke="currentColor"
-            opacity=".08"
+            fill="none"
+            strokeWidth="4"
           />
-          {points.length > 0 ? (
-            <polyline
-              points={plot}
-              stroke="currentColor"
-              fill="none"
-              strokeWidth="1.7"
-            />
-          ) : (
-            <circle cx="155" cy="60" r="22" fill="none" stroke="currentColor" />
-          )}
-        </svg>
-        <span className="visual-caption">
-          {points.length ? "实际飞行轨迹 · XY 投影" : "轨迹待核验"}
-        </span>
-      </div>
-      <div className="card-copy">
-        <div className="section-line">
-          <span className="kind">
-            <Flame size={12} />
-            {kindNames[t.kind] || t.kind}
-          </span>
-          <span className="micro">
-            R{t.round_number} · {t.time.toFixed(1)}s
-          </span>
-        </div>
+        ) : (
+          <circle cx="155" cy="60" r="22" fill="none" stroke="currentColor" />
+        )}
+      </svg>
+      <span className={`side ${t.side}`}>{t.side}</span>
+      <span className="throw-main">
         <h3>
           {t.teaching.title || `${t.player} · ${kindNames[t.kind] || t.kind}`}
         </h3>
-        <p>
+        <span className="micro">
+          {kindNames[t.kind] || t.kind} ·{" "}
           {t.teaching.area ||
             (t.origin_area
               ? `${t.origin_area} → ${t.effect_area || "落点区域未知"}`
               : "区域待整理")}{" "}
-          <span>· {t.team || t.side}</span>
-        </p>
-        <div className="card-bottom">
-          <span>{t.player}</span>
-          <span className={t.gaps.length ? "status pending" : "status"}>
-            {t.gaps.length ? (
-              "教学待完善"
-            ) : (
-              <>
-                <CheckCircle2 size={12} />
-                资料齐全
-              </>
-            )}
-          </span>
-        </div>
-      </div>
+          · {t.team || t.side}
+          {!points.length && " · 轨迹待核验"}
+        </span>
+      </span>
+      <span className="row-meta">
+        {t.map.replace("de_", "")} · R{t.round_number} · {t.time.toFixed(1)}s
+      </span>
+      <span className={t.gaps.length ? "status pending" : "status"}>
+        {t.gaps.length ? "教学待完善" : "资料齐全"}
+      </span>
     </button>
   );
 }
@@ -1336,63 +1091,22 @@ function RoundCard({
   const m = catalog.matches.find((m) => m.id === r.match_id)!;
   return (
     <button data-testid="round-card" className="round-card" onClick={onOpen}>
-      <div className="section-line">
-        <span className="eyebrow">
-          {m.map.replace("de_", "").toUpperCase()}
+      <span className="round-number">R{String(r.number).padStart(2, "0")}</span>
+      <span className={`side ${r.winner}`}>{r.winner || "未知"} 获胜</span>
+      <span className="throw-main">
+        <h3>{m.source.match}</h3>
+        <span className="micro">
+          {m.source.event} · {m.source.date} · {m.map.replace("de_", "")} ·{" "}
+          {r.is_pistol ? "手枪局" : "正式回合"}
         </span>
-        <span className="tag">{r.is_pistol ? "手枪局" : "正式回合"}</span>
-      </div>
-      <div className="round-number">
-        R{String(r.number).padStart(2, "0")}{" "}
-        <span className={`side ${r.winner}`}>{r.winner || "未知"} 获胜</span>
-      </div>
-      <h3>{m.source.match}</h3>
-      <p>
-        {m.source.event} · {m.source.date}
-      </p>
-      <div className="round-fact">
-        <span>首杀</span>
-        <strong>
-          {r.opening_kill
-            ? `${r.opening_kill.attacker} → ${r.opening_kill.victim}`
-            : "未记录"}
-        </strong>
-      </div>
-      <div className="round-fact">
-        <span>装备快照</span>
-        <strong>
-          {r.equipment.length} 名选手 · 全回合路线 <ArrowRight size={14} />
-        </strong>
-      </div>
+      </span>
+      <span className="row-meta">
+        首杀{" "}
+        {r.opening_kill
+          ? `${r.opening_kill.attacker} → ${r.opening_kill.victim}`
+          : "未记录"}{" "}
+        · {r.equipment.length} 名选手
+      </span>
     </button>
-  );
-}
-function Coverage({ catalog }: { catalog: Catalog }) {
-  return (
-    <section className="coverage">
-      <div>
-        <Shield size={18} />
-        <strong>当前内容覆盖</strong>
-      </div>
-      <p>
-        {catalog.matches.length
-          ? [
-              ...new Set(catalog.matches.map((m) => m.map.replace("de_", ""))),
-            ].join(" / ")
-          : "尚未导入比赛"}
-        <span>
-          {" "}
-          · {catalog.matches.length} 份比赛地图 · 教学按核验进度逐步补充
-        </span>
-      </p>
-      <a
-        href="https://github.com/Chester-chs/CS2-OpeningRoutes"
-        target="_blank"
-        rel="noreferrer"
-        aria-label="查看项目介绍"
-      >
-        <ExternalLink size={16} />
-      </a>
-    </section>
   );
 }

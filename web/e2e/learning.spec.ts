@@ -8,8 +8,10 @@ test("real catalog supports utility, whole-round context and independent pistol 
     timeout: 60000,
   });
   await expect(
-    page.getByRole("heading", { name: /从比赛里\s*找到答案。/ }),
+    page.getByRole("heading", { name: "发现", exact: true }),
   ).toBeVisible();
+  const recent = page.getByRole("table", { name: "最近比赛" });
+  await expect(recent.getByRole("row").nth(1)).toBeVisible();
   await page.getByRole("button", { name: "道具库", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "道具库", exact: true }),
@@ -145,9 +147,13 @@ test("desktop studio opens from the summary and loads maps on demand", async ({
   page,
 }) => {
   await page.goto("/");
+  // Home lists every map from the summary, before any map's throws are loaded.
+  await expect(
+    page.getByRole("table", { name: "地图概览" }).getByRole("row"),
+  ).toHaveCount(3);
+  await page.getByRole("button", { name: "道具库", exact: true }).click();
   const loader = page.getByRole("region", { name: "按地图载入资料" });
   await expect(loader.getByText("已载入 1/2 张地图")).toBeVisible();
-  await page.getByRole("button", { name: "道具库", exact: true }).click();
   const count = async () =>
     Number(await page.locator(".results strong").first().textContent());
   const before = await count();
@@ -163,3 +169,59 @@ test("desktop studio opens from the summary and loads maps on demand", async ({
     await expect(page.locator(".pattern-card").first()).toBeVisible();
   }
 });
+
+for (const [section, heightLimit] of [
+  ["道具库", 300],
+  ["手枪局", 260],
+] as const) {
+  test(`phone ${section} keeps all filters usable in a compact panel`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await expect(page.locator('[data-ready="true"]')).toBeVisible();
+    await page
+      .getByRole("navigation", { name: "主要导航" })
+      .getByRole("button", { name: section, exact: true })
+      .click();
+    const filters = page.getByRole("region", { name: "内容筛选" });
+    const bounds = await filters.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.height).toBeLessThanOrEqual(heightLimit);
+    for (const label of [
+      "搜索选手、区域或教学",
+      "地图",
+      "阵营",
+      "选手",
+      "战队",
+      "比赛",
+      "起始日期",
+      "结束日期",
+      ...(section === "道具库"
+        ? ["道具类型", "区域", "教学状态"]
+        : ["回合结果"]),
+    ]) {
+      await expect(filters.getByLabel(label, { exact: true })).toBeVisible();
+    }
+    await filters
+      .getByLabel("地图", { exact: true })
+      .selectOption("de_ancient");
+    await filters.getByLabel("阵营", { exact: true }).selectOption("CT");
+    await expect(filters.getByLabel("地图", { exact: true })).toHaveValue(
+      "de_ancient",
+    );
+    await expect(filters.getByLabel("阵营", { exact: true })).toHaveValue(
+      "CT",
+    );
+    await filters
+      .getByRole("button", { name: "清除筛选", exact: true })
+      .click();
+    await expect(filters.getByLabel("地图", { exact: true })).toHaveValue("");
+    await expect(filters.getByLabel("阵营", { exact: true })).toHaveValue("");
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBeTruthy();
+  });
+}
