@@ -1,5 +1,6 @@
 """Export only reviewed learning content and its explicit dependencies."""
 
+import copy
 import hashlib
 import json
 import shutil
@@ -158,6 +159,34 @@ def export_bundle(store: Store, output: Path, *, include_pistols: bool = False) 
             }
             for map_name, analysis in (catalog.get("ct_patterns") or {}).items()
         }
+        # Opening defaults: aggregated from source-verified rounds; round lists stay in the studio
+        # and example rounds are kept only when the round itself is exported.
+        openings_index = {}
+        for map_name in sorted(set(ct_patterns) | {m["map"] for m in matches}):
+            # a copy: the store keeps the analysis in an in-process cache
+            data = copy.deepcopy(store.openings(map_name))
+            if not data:
+                continue
+            for bucket in data["buckets"]:
+                bucket["t"] = {k: v for k, v in bucket["t"].items() if k != "assignments"}
+                bucket["t"]["patterns"] = [
+                    {
+                        **{k: v for k, v in pattern.items() if k != "round_ids"},
+                        "representative": pattern["representative"]
+                        if pattern["representative"] in exported_rounds
+                        else "",
+                    }
+                    for pattern in bucket["t"]["patterns"]
+                ]
+                for scout in bucket["teams"].values():
+                    for side in scout.values():
+                        for default in side["defaults"]:
+                            default["examples"] = [e for e in default["examples"] if e in exported_rounds]
+            (staging / "openings").mkdir(exist_ok=True)
+            (staging / "openings" / f"{map_name}.json").write_text(
+                json.dumps(data, ensure_ascii=False, allow_nan=False), encoding="utf-8"
+            )
+            openings_index[map_name] = f"openings/{map_name}.json"
         used_maps = {m["map"] for m in matches} | set(ct_patterns)
         places = {k: v for k, v in catalog.get("places", {}).items() if k in used_maps}
         bundle = {
@@ -170,6 +199,7 @@ def export_bundle(store: Store, output: Path, *, include_pistols: bool = False) 
             "places": places,
             "ct_patterns": ct_patterns,
             "learning_index": "learning/index.json",
+            "openings_index": openings_index,
         }
         (staging / "catalog.json").write_text(json.dumps(bundle, ensure_ascii=False), encoding="utf-8")
         checksums = {

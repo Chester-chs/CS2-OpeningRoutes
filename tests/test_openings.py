@@ -165,6 +165,7 @@ def match(match_id, date, version, rounds, *, verified=True, t_team="Alpha", ct_
                 "match_id": match_id,
                 "number": int(f["round_id"].rsplit("-r", 1)[1]),
                 "complete": True,
+                "is_pistol": False,
                 "winner": f["winner"],
                 "freeze_end_tick": 0,
                 "learning_events": [],
@@ -264,4 +265,6 @@ def test_export_writes_verified_openings_without_round_lists(tmp_path):
         assert all("round_ids" not in p for p in bucket["t"]["patterns"])
         assert all(p["representative"] in rounds | {""} for p in bucket["t"]["patterns"])
         for scout in bucket["teams"].values():
-            assert all(e in rounds for side in scout.values() for d in side["defaults"] for e in d["examples"])
+            assert all(
+                e in rounds for side in scout.values() for d in side["defaults"] for e in d["examples"]
+            )

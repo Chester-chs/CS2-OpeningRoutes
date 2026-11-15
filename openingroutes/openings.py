@@ -340,7 +340,7 @@ def build(
             patches[r["version"]][0].add(r["round_id"])
             patches[r["version"]][1].add(r["match_id"])
         ct_counts = Counter(r["ct_label"] for r in b["rows"])
-        teams = sorted({r["t_team"] for r in b["rows"]} | {r["ct_team"] for r in b["rows"]} - {None})
+        teams = sorted(({r["t_team"] for r in b["rows"]} | {r["ct_team"] for r in b["rows"]}) - {None})
         out.append(
             {
                 "id": key,
