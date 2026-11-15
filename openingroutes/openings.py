@@ -110,6 +110,8 @@ def cluster_t(map_name, formations, throws, overrides=None, *, min_cluster=3, ma
     at20 = T_SNAPSHOT_SECONDS.index(20)
     for c in range(k):
         idx = np.where(labels == c)[0]
+        if not len(idx):  # k-means can leave a cluster empty on tiny buckets
+            continue
         members = [usable[i] for i in idx]
         centre = x[idx].mean(0)
         rep = members[int(((x[idx] - centre) ** 2).sum(1).argmin())]
@@ -363,7 +365,6 @@ def build(
                     team: team_scout(b["rows"], team, min_rounds=min_rounds, min_matches=min_matches)
                     for team in teams
                 },
-                "rows": b["rows"],
             }
         )
     return {"schema_version": 1, "map": map_name, "version": OPENINGS_VERSION, "buckets": out}

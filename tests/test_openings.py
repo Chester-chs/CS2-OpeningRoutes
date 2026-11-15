@@ -15,6 +15,12 @@ def t_snapshot(second, places, dead=()):
     }
 
 
+def ct_places(round_id, plan):
+    """Two CT setups, with one player varying by round so the setups are not identical points."""
+    stack = ["BombsiteA"] * 3 + ["BombsiteB"] if plan == "a_rush" else ["BombsiteA"] + ["BombsiteB"] * 3
+    return stack + [("CTSpawn", "TopofMid", "Apartments")[int(round_id.rsplit("-r", 1)[1]) % 3]]
+
+
 def formation(round_id, plan, winner="T", *, t_team="Alpha", ct_team="Beta", dead=(), plant="A"):
     """plan: "a_rush" sends all five to A by 15 s; "b_split" puts three in B and two in mid."""
     spawn = ["TSpawn"] * 5
@@ -34,6 +40,16 @@ def formation(round_id, plan, winner="T", *, t_team="Alpha", ct_team="Beta", dea
             "plant_site": plant,
         },
         "opening_context": {"t_econ": "long_gun"},
+        "snapshots": [
+            {
+                "second": s,
+                "ct": [
+                    {"player_id": f"c{i}", "player": f"C{i}", "place": place, "alive": True}
+                    for i, place in enumerate(ct_places(round_id, plan))
+                ],
+            }
+            for s in (10, 12, 15, 18, 20)
+        ],
         "t_snapshots": [t_snapshot(s, spawn if s < 10 else late, dead if s >= 15 else ()) for s in SECONDS],
     }
 

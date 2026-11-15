@@ -445,6 +445,50 @@ class Store:
             )
         return result.get(map_name)
 
+    _openings_memory: dict = {}
+
+    def openings(self, map_name):
+        """T defaults x CT setups for one map, cached on disk until the library inputs change."""
+        import hashlib
+
+        from . import openings as O
+
+        if not self._map_matches(map_name):
+            return None
+        # The learning key already covers sources, revisions, reviews, area labels and map eras.
+        key = hashlib.sha256(json.dumps([O.OPENINGS_VERSION, self._profile_key()]).encode()).hexdigest()
+        memory_key = (str(self.db.resolve()), map_name)
+        cached = Store._openings_memory.get(memory_key)
+        if cached and cached[0] == key:
+            return cached[1]
+        disk = self.root / "cache" / "openings" / f"{hashlib.sha256(map_name.encode()).hexdigest()[:12]}.json"
+        try:
+            stored = json.loads(disk.read_text(encoding="utf-8"))
+            if stored.get("key") == key:
+                Store._openings_memory[memory_key] = (key, stored["data"])
+                return stored["data"]
+        except (OSError, ValueError, AttributeError):
+            pass
+        reviews = self.all("round_reviews")
+        data = _finite(
+            O.build(
+                map_name,
+                self._map_matches(map_name),
+                self._ct_for_map(map_name, reviews),
+                reviews=reviews,
+                overrides=self.place_overrides("area"),
+            )
+        )
+        Store._openings_memory[memory_key] = (key, data)
+        try:
+            disk.parent.mkdir(parents=True, exist_ok=True)
+            tmp = disk.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"key": key, "data": data}, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(disk)
+        except OSError:
+            pass
+        return data
+
     def map_variants(self, map_name, throws, decisions, protected):
         """One map's variant groups and matched misthrow rules, cached on disk on their inputs."""
         import hashlib
