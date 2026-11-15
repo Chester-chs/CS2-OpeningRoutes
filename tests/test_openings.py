@@ -79,9 +79,27 @@ def test_first_contact_is_the_first_cross_side_damage():
     row = {
         "freeze_end_tick": 1000,
         "learning_events": [
-            {"kind": "hurt", "tick": 1200, "attacker_side": "T", "victim_side": "T", "victim_place": "TSpawn"},
-            {"kind": "hurt", "tick": 1640, "attacker_side": "CT", "victim_side": "T", "victim_place": "TopofMid"},
-            {"kind": "death", "tick": 1700, "attacker_side": "CT", "victim_side": "T", "victim_place": "TopofMid"},
+            {
+                "kind": "hurt",
+                "tick": 1200,
+                "attacker_side": "T",
+                "victim_side": "T",
+                "victim_place": "TSpawn",
+            },
+            {
+                "kind": "hurt",
+                "tick": 1640,
+                "attacker_side": "CT",
+                "victim_side": "T",
+                "victim_place": "TopofMid",
+            },
+            {
+                "kind": "death",
+                "tick": 1700,
+                "attacker_side": "CT",
+                "victim_side": "T",
+                "victim_place": "TopofMid",
+            },
         ],
     }
     assert openings.first_contact(row, 64) == {"second": 10.0, "place": "TopofMid", "by": "CT"}
