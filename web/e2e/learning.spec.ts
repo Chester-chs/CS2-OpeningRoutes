@@ -8,8 +8,10 @@ test("real catalog supports utility, whole-round context and independent pistol 
     timeout: 60000,
   });
   await expect(
-    page.getByRole("heading", { name: /从比赛里\s*找到答案。/ }),
+    page.getByRole("heading", { name: "发现", exact: true }),
   ).toBeVisible();
+  const recent = page.getByRole("table", { name: "最近比赛" });
+  await expect(recent.getByRole("row").nth(1)).toBeVisible();
   await page.getByRole("button", { name: "道具库", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "道具库", exact: true }),
