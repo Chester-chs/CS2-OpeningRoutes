@@ -51,6 +51,29 @@ describe("home tables", () => {
       { team: "Gamma", matches: 2, latest: "2026-10-03" },
     ]);
   });
+  it("orders tied maps by name whether or not the summary is present", () => {
+    const tied = {
+      ...catalog,
+      maps: [
+        { map: "de_nuke", matches: 2, rounds: 0, throws: 0, complete: 0 },
+        { map: "de_anubis", matches: 2, rounds: 0, throws: 0, complete: 0 },
+      ],
+    } as Catalog;
+    expect(mapRows(tied).map((m) => m.map)).toEqual(["de_anubis", "de_nuke"]);
+  });
+  it("splits 'vs.' labels, counts a team once per match and keeps empty dates out", () => {
+    const odd = {
+      ...catalog,
+      matches: [
+        match("x1", "de_nuke", "", "Delta vs. Echo · Nuke"),
+        match("x2", "de_nuke", "2026-01-02", "Delta vs Delta"),
+      ],
+    } as unknown as Catalog;
+    expect(teamRows(odd)).toEqual([
+      { team: "Delta", matches: 2, latest: "2026-01-02" },
+      { team: "Echo", matches: 1, latest: "" },
+    ]);
+  });
   it("shows the newest matches first with their teams and source check", () => {
     const rows = recentMatches(catalog, 2);
     expect(rows.map((r) => r.id)).toEqual(["m2", "m1"]);

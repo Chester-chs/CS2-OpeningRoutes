@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink } from "lucide-react";
 import { DataClient, kindNames } from "./data";
 import { nadesLink, rateText } from "./openings";
 import type { OpeningBucket, Openings as OpeningsData } from "./openings";
@@ -60,10 +59,9 @@ export default function OpeningsPage({
     (id === null ? "未归类" : `阵型 ${id + 1}`);
   return (
     <section className="openings" data-testid="openings">
-      <p className="notice">
-        开局前 30 秒：T 方默认打法 × CT 防守阵型。样本少于 10 回合或 3
-        场时只显示数量；胜率是比赛观察，不代表最优选择。具体道具投法请到
-        nades.ai 查看。
+      <p className="hint">
+        开局前 30 秒。少于 10 回合或 3
+        场只显示数量；胜率是比赛观察，不是最优解。道具投法见 nades.ai。
       </p>
       <div className="learning-filters">
         <label>
@@ -118,64 +116,73 @@ export default function OpeningsPage({
               {w}
             </p>
           ))}
-          <div className="card-grid">
-            {bucket.t.patterns.map((p) => (
-              <article
-                className="pattern-card"
-                key={p.id}
-                data-testid="t-default"
-              >
-                <h3>{p.name}</h3>
-                <p className="micro">
-                  T 胜率{" "}
-                  {rateText({
-                    status: p.status,
-                    rounds: p.decided,
-                    matches: p.matches,
-                    rate: p.t_win_rate,
-                    interval: null,
-                  })}
-                  · 20 秒常见站位：
-                  {p.setups.map((s) => s.setup).join(" / ")}
-                </p>
-                <ul>
-                  {p.utility_timing.slice(0, 4).map((u) => {
-                    const link = nadesLink(current, u.kind);
-                    return (
-                      <li key={`${u.kind}-${u.area}`}>
-                        {kindNames[u.kind] || u.kind} → {u.area} · 中位{" "}
-                        {u.median} 秒 · {u.count} 次
-                        {link && (
-                          <>
-                            {" "}
-                            <a
-                              href={link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              nades.ai 上的{kindNames[u.kind] || u.kind}点位{" "}
-                              <ExternalLink size={12} aria-hidden="true" />
-                            </a>
-                          </>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-                <button
-                  type="button"
-                  className="text-button"
-                  disabled={!p.representative}
-                  onClick={() => openRound(p.representative)}
-                >
-                  代表回合
-                </button>
-              </article>
-            ))}
+          <div className="table-scroll">
+            <table className="data-table" aria-label="T 方默认打法">
+              <thead>
+                <tr>
+                  <th scope="col">打法</th>
+                  <th scope="col">T 胜率</th>
+                  <th scope="col">20 秒站位</th>
+                  <th scope="col">道具（中位秒）</th>
+                  <th scope="col">代表回合</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bucket.t.patterns.map((p) => (
+                  <tr key={p.id} data-testid="t-default">
+                    <th scope="row">{p.name}</th>
+                    <td>
+                      {rateText({
+                        status: p.status,
+                        rounds: p.decided,
+                        matches: p.matches,
+                        rate: p.t_win_rate,
+                        interval: null,
+                      })}
+                    </td>
+                    <td>{p.setups.map((s) => s.setup).join(" / ")}</td>
+                    <td>
+                      {p.utility_timing.slice(0, 4).map((u) => {
+                        const kind = kindNames[u.kind] || u.kind;
+                        const link = nadesLink(current, u.kind);
+                        return (
+                          <div key={`${u.kind}-${u.area}`}>
+                            {kind} → {u.area} · {u.median}s · {u.count} 次
+                            {link && (
+                              <>
+                                {" "}
+                                <a
+                                  href={link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  aria-label={`nades.ai 上的${kind}点位`}
+                                >
+                                  nades.ai
+                                </a>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="text-button"
+                        disabled={!p.representative}
+                        onClick={() => openRound(p.representative)}
+                      >
+                        代表回合
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
           <h2>对位：T 默认打法 × CT 阵型</h2>
           <div className="table-scroll">
-            <table data-testid="matchups">
+            <table className="data-table" data-testid="matchups">
               <caption className="micro">
                 行：T 方默认打法；列：CT 防守阵型；格子：T 方胜率及 95% 区间
               </caption>
@@ -223,7 +230,6 @@ export default function OpeningsPage({
               </tbody>
             </table>
           </div>
-          <p className="micro">格子里是 T 方胜率及 95% 区间。</p>
           <h2>单队侦察</h2>
           <label>
             战队
@@ -244,35 +250,60 @@ export default function OpeningsPage({
               const scout = bucket.teams[scoutTeam][side];
               return (
                 <div key={side} data-testid={`scout-${side}`}>
-                  <h3>
+                  <h3 className="scout-head">
                     {scoutTeam} · {side} · {scout.rounds} 回合 / {scout.matches}{" "}
                     场
                   </h3>
-                  <ul>
-                    {scout.defaults.map((d) => (
-                      <li key={String(d.label)}>
-                        {side === "T" ? tName(d.label) : ctName(d.label)}：
-                        {rateText({
-                          status: d.status,
-                          rounds: d.rounds,
-                          matches: d.matches,
-                          rate: d.win_rate,
-                          interval: d.interval,
+                  <div className="table-scroll">
+                    <table
+                      className="data-table"
+                      aria-label={`${scoutTeam} ${side} 方打法`}
+                    >
+                      <thead>
+                        <tr>
+                          <th scope="col">{side === "T" ? "打法" : "阵型"}</th>
+                          <th scope="col">胜率</th>
+                          <th scope="col">回合</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {scout.defaults.map((d) => {
+                          const name =
+                            side === "T" ? tName(d.label) : ctName(d.label);
+                          return (
+                            <tr key={String(d.label)}>
+                              <th scope="row">{name}</th>
+                              <td>
+                                {rateText({
+                                  status: d.status,
+                                  rounds: d.rounds,
+                                  matches: d.matches,
+                                  rate: d.win_rate,
+                                  interval: d.interval,
+                                })}
+                              </td>
+                              <td>
+                                {d.examples.map((id) => {
+                                  const round = id.split("-r").pop();
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={id}
+                                      className="text-button round-link"
+                                      aria-label={`查看 ${name} 的第 ${round} 回合`}
+                                      onClick={() => openRound(id)}
+                                    >
+                                      R{round}
+                                    </button>
+                                  );
+                                })}
+                              </td>
+                            </tr>
+                          );
                         })}
-                        {d.examples.map((id) => (
-                          <button
-                            type="button"
-                            key={id}
-                            className="text-button"
-                            aria-label={`查看 ${side === "T" ? tName(d.label) : ctName(d.label)} 的第 ${id.split("-r").pop()} 回合`}
-                            onClick={() => openRound(id)}
-                          >
-                            回合 {id.split("-r").pop()}
-                          </button>
-                        ))}
-                      </li>
-                    ))}
-                  </ul>
+                      </tbody>
+                    </table>
+                  </div>
                   <p className="micro">
                     对手：
                     {Object.entries(scout.opponents)

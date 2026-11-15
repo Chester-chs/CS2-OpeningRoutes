@@ -147,9 +147,13 @@ test("desktop studio opens from the summary and loads maps on demand", async ({
   page,
 }) => {
   await page.goto("/");
+  // Home lists every map from the summary, before any map's throws are loaded.
+  await expect(
+    page.getByRole("table", { name: "地图概览" }).getByRole("row"),
+  ).toHaveCount(3);
+  await page.getByRole("button", { name: "道具库", exact: true }).click();
   const loader = page.getByRole("region", { name: "按地图载入资料" });
   await expect(loader.getByText("已载入 1/2 张地图")).toBeVisible();
-  await page.getByRole("button", { name: "道具库", exact: true }).click();
   const count = async () =>
     Number(await page.locator(".results strong").first().textContent());
   const before = await count();

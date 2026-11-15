@@ -118,7 +118,7 @@ function TeachingEditor({
         />
         已重新验证本次修改的操作、图示与地图版本
       </label>
-      <div className="notice">
+      <div className="hint">
         先核对原比赛，再补齐复现步骤。原始视角是出手时的数值参考，按键、站位图与瞄点需要游戏内验证。
       </div>
       <div className="form-grid">
@@ -298,8 +298,7 @@ export default function Detail({
         <div className="detail-head">
           <div>
             <p className="eyebrow">
-              {match.map.replace("de_", "").toUpperCase()} / ROUND{" "}
-              {round.number}
+              {match.map.replace("de_", "")} · 第 {round.number} 回合
             </p>
             <h2>{title}</h2>
             <p className="muted">

@@ -211,9 +211,6 @@ export default function PlayerAreas({
   }
   return (
     <section className="player-learning">
-      <p className="muted">
-        选一个人或一支队伍，看看他们怎样进入、争夺和守住同一块区域。先看真实回合，再比较情境，最后跟练。
-      </p>
       {(!loaded || index.state === "building") && (
         <p role="status" className="notice">
           正在整理选手区域档案…
@@ -235,11 +232,11 @@ export default function PlayerAreas({
       )}
       {index.state === "ready" && (
         <>
-          <p className="micro">
+          <p className="hint">
             覆盖 {index.coverage.analyzed_rounds || 0} /{" "}
-            {index.coverage.eligible_rounds || 0} 个来源已核验有效回合；
-            {index.coverage.missing_rounds || 0} 个缺少区域路线，需重新导入原
-            Demo。同一地图时期内的比赛跨补丁合并统计，档案标题下列出各补丁的局数；不在任何地图时期内的比赛仍按补丁分开。
+            {index.coverage.eligible_rounds || 0} 个已核验回合 · 缺少区域路线{" "}
+            {index.coverage.missing_rounds || 0} 个（需重新导入原 Demo）·
+            同一地图时期内跨补丁合并
           </p>
           <div className="learning-filters">
             <Choice
@@ -364,17 +361,15 @@ function Distribution({
 
 function Confidence({ stats }: { stats: LearningStats }) {
   return (
-    <p className="notice">
-      样本：{stats.counts.rounds} 回合 / {stats.counts.matches} 场比赛地图 /{" "}
-      {stats.counts.players} 人，含 {stats.counts.pistols} 个手枪局。 置信提示：
+    <p className="hint">
+      样本 {stats.counts.rounds} 回合 / {stats.counts.matches} 场 /{" "}
+      {stats.counts.players} 人（手枪局 {stats.counts.pistols}）· 置信：
       {stats.confidence.status === "exploratory"
-        ? "探索性样本，尚不足 30 回合或 5 场比赛，不代表稳定习惯。"
-        : "描述性统计，仍需结合对手和比赛时期解读。"}
-      {stats.counts.matches >= 5
-        ? "比例区间按比赛整块重采样 400 次计算。"
-        : "不足 5 场，不提供置信区间。"}
-      区域帧缺失 {percent(stats.missing_fraction)}；本侧获胜 {stats.wins}{" "}
-      局，不能据此认定某条路线造成胜利。
+        ? "探索性（不足 30 回合或 5 场）"
+        : "描述性"}
+      {stats.counts.matches >= 5 ? " · 区间按比赛重采样 400 次" : " · 无区间"} ·
+      区域帧缺失 {percent(stats.missing_fraction)} · 本侧胜 {stats.wins}{" "}
+      局（相关，不代表因果）
     </p>
   );
 }

@@ -7,8 +7,13 @@ export function teamsOf(label: string) {
   return label.split(" · ")[0].trim();
 }
 
+// Plain code-point order: source dates are ISO "YYYY-MM-DD", and it does not depend on locale.
+const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+const byMatches = (a: MapSummary, b: MapSummary) =>
+  b.matches - a.matches || byText(a.map, b.map);
+
 export function mapRows(c: Catalog): MapSummary[] {
-  if (c.maps?.length) return [...c.maps].sort((a, b) => b.matches - a.matches);
+  if (c.maps?.length) return [...c.maps].sort(byMatches);
   const rows = new Map<string, MapSummary>();
   const mapOf = new Map(c.matches.map((m) => [m.id, m.map]));
   for (const m of c.matches) {
@@ -34,9 +39,7 @@ export function mapRows(c: Catalog): MapSummary[] {
         row.complete += 1;
     }
   }
-  return [...rows.values()].sort(
-    (a, b) => b.matches - a.matches || a.map.localeCompare(b.map),
-  );
+  return [...rows.values()].sort(byMatches);
 }
 
 export function teamRows(c: Catalog) {
@@ -45,26 +48,30 @@ export function teamRows(c: Catalog) {
     { team: string; matches: number; latest: string }
   >();
   for (const m of c.matches) {
-    for (const team of teamsOf(m.source.match).split(/\s+vs\s+/i)) {
-      const name = team.trim();
-      if (!name) continue;
+    // "A vs B", "A vs. B" or "A v B"; a team listed twice still played one map.
+    const names = new Set(
+      teamsOf(m.source.match)
+        .split(/\s+(?:vs\.?|v)\s+/i)
+        .map((t) => t.trim())
+        .filter(Boolean),
+    );
+    for (const name of names) {
       const row = rows.get(name) || { team: name, matches: 0, latest: "" };
       row.matches += 1;
-      if (m.source.date > row.latest) row.latest = m.source.date;
+      if (byText(m.source.date, row.latest) > 0) row.latest = m.source.date;
       rows.set(name, row);
     }
   }
   return [...rows.values()].sort(
-    (a, b) => b.matches - a.matches || a.team.localeCompare(b.team),
+    (a, b) =>
+      b.matches - a.matches ||
+      byText(a.team.toLowerCase(), b.team.toLowerCase()),
   );
 }
 
 export function recentMatches(c: Catalog, limit = 10) {
   return [...c.matches]
-    .sort(
-      (a, b) =>
-        b.source.date.localeCompare(a.source.date) || a.id.localeCompare(b.id),
-    )
+    .sort((a, b) => byText(b.source.date, a.source.date) || byText(a.id, b.id))
     .slice(0, limit)
     .map((m) => ({
       id: m.id,
