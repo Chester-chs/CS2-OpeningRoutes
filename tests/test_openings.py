@@ -244,3 +244,24 @@ def test_openings_api_serves_one_map_and_validates_the_name(tmp_path):
     assert body["map"] == "de_mirage" and body["buckets"][0]["matchups"]
     assert client.get("/api/openings/de_missing").status_code == 404
     assert client.get("/api/openings/DE%20MIRAGE").status_code == 422
+
+
+def test_export_writes_verified_openings_without_round_lists(tmp_path):
+    import json
+
+    from openingroutes.publish import export_bundle
+
+    store = seed_openings(tmp_path)
+    exported = export_bundle(store, tmp_path / "export", include_pistols=True)
+    manifest = json.loads((exported / "manifest.json").read_text(encoding="utf-8"))
+    assert "openings/de_mirage.json" in manifest["files"]
+    path = exported / "openings/de_mirage.json"
+    assert path.stat().st_size < 2_000_000
+    data = json.loads(path.read_text(encoding="utf-8"))
+    rounds = {r["id"] for r in json.loads((exported / "catalog.json").read_text(encoding="utf-8"))["rounds"]}
+    for bucket in data["buckets"]:
+        assert "assignments" not in bucket["t"]
+        assert all("round_ids" not in p for p in bucket["t"]["patterns"])
+        assert all(p["representative"] in rounds | {""} for p in bucket["t"]["patterns"])
+        for scout in bucket["teams"].values():
+            assert all(e in rounds for side in scout.values() for d in side["defaults"] for e in d["examples"])
