@@ -428,7 +428,8 @@ export default function App() {
               </button>
             </div>
           )}
-          {page === "home" ? (
+          {/* init establishes the client mode and static manifest before pages fetch data. */}
+          {loading ? null : page === "home" ? (
             <HomePage
               catalog={catalog}
               navigate={navigate}
