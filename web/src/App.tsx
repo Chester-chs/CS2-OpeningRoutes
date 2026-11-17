@@ -444,6 +444,8 @@ export default function App() {
               catalog={catalog}
               onRefresh={refresh}
               onOpenRound={(id) => setDetail({ id, kind: "round" })}
+              onSelectMap={ensureMap}
+              loadingMaps={mapLoading}
             />
           ) : page === "learn" ? (
             <PlayerAreas
@@ -670,14 +672,7 @@ export default function App() {
                 </>
               )}
               {page === "saved" && (
-                <PracticeShelf
-                  key={storageMessage}
-                  openRound={(id) => setDetail({ id, kind: "round" })}
-                  openLearning={openLearning}
-                />
-              )}
-              {page === "saved" && (
-                <div className="actions">
+                <div className="actions saved-tools">
                   <button className="button secondary" onClick={backup}>
                     <ArrowDownToLine size={15} />
                     导出学习记录
@@ -810,6 +805,7 @@ export default function App() {
                 </>
               )}
               {!loading &&
+                page !== "saved" &&
                 ((isRounds && rounds.length === 0) ||
                   (!isRounds && throws.length === 0)) && (
                   <div className="empty">
@@ -830,6 +826,18 @@ export default function App() {
                     )}
                   </div>
                 )}
+              {page === "saved" && (
+                <>
+                  {!loading && throws.length === 0 && rounds.length === 0 && (
+                    <p className="hint">当前筛选下没有收藏的道具或回合。</p>
+                  )}
+                  <PracticeShelf
+                    key={storageMessage}
+                    openRound={(id) => setDetail({ id, kind: "round" })}
+                    openLearning={openLearning}
+                  />
+                </>
+              )}
               {(isRounds ? rounds.length : throws.length) > limit && (
                 <button
                   className="button secondary load-more"

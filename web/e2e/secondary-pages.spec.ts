@@ -91,9 +91,9 @@ for (const width of [1440, 390]) {
     await expect(page.getByLabel("关闭详情")).toBeVisible();
     await page.getByLabel("关闭详情").click();
     await row.getByRole("button", { name: "编辑方案" }).click();
-    await expect(page.getByLabel("方案名称", { exact: true })).toHaveValue(
-      "Synthetic A hold",
-    );
+    await expect(
+      page.getByRole("textbox", { name: "方案名称", exact: true }),
+    ).toHaveValue("Synthetic A hold");
     await page.getByRole("button", { name: "取消编辑" }).click();
     await fitsScreen(page);
   });

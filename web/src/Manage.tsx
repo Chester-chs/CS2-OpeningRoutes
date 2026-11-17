@@ -27,11 +27,15 @@ export default function Manage({
   catalog,
   onRefresh,
   onOpenRound,
+  onSelectMap,
+  loadingMaps = [],
 }: {
   client: DataClient;
   catalog: Catalog;
   onRefresh: () => void;
   onOpenRound?: (id: string) => void;
+  onSelectMap?: (map: string) => void;
+  loadingMaps?: string[];
 }) {
   const [source, setSource] = useState<Source>({
     event: "",
@@ -114,13 +118,11 @@ export default function Manage({
       <section className="panel">
         <div className="section-line">
           <h2>导入职业比赛 Demo</h2>
-          <FileUp size={20} />
         </div>
-        <p className="muted">
+        <p className="hint">
           提取全员正式回合、投掷、路线及手枪局，文件保存在本机。
         </p>
         <label className="file-zone">
-          <FileUp size={28} />
           <strong>{file?.name || "选择 .dem 文件"}</strong>
           <span>CS2 SourceTV · 最大 2 GiB</span>
           <input
@@ -231,30 +233,139 @@ export default function Manage({
           )}
         </div>
       </section>
-      <section className="panel wide">
-        <h2>比赛来源核验</h2>
-        {catalog.matches.length === 0 ? (
-          <p className="muted">尚未导入比赛。</p>
-        ) : (
-          catalog.matches.map((match) => (
-            <SourceReview
-              key={match.id}
-              initial={match.source}
-              matchId={match.id}
-              map={match.map}
-              client={client}
-              onRefresh={onRefresh}
-            />
-          ))
-        )}
-      </section>
+      <SourceList catalog={catalog} client={client} onRefresh={onRefresh} />
       <RoundQueue catalog={catalog} onOpenRound={onOpenRound} />
       <PlaceVocabulary
         catalog={catalog}
         client={client}
         onRefresh={onRefresh}
+        onSelectMap={onSelectMap}
+        loadingMaps={loadingMaps}
       />
     </div>
+  );
+}
+
+function SourceList({
+  catalog,
+  client,
+  onRefresh,
+}: {
+  catalog: Catalog;
+  client: DataClient;
+  onRefresh: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("");
+  const [selected, setSelected] = useState("");
+  const matches = catalog.matches.filter(
+    (m) =>
+      (!status || Boolean(m.source.verified) === (status === "verified")) &&
+      [m.source.match, m.source.event, m.source.date, m.map]
+        .join(" ")
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()),
+  );
+  const editing = matches.find((m) => m.id === selected);
+  return (
+    <section className="panel wide source-list">
+      <h2>比赛来源核验</h2>
+      <div className="list-filters" role="search" aria-label="来源筛选">
+        <label className="list-search">
+          搜索比赛来源
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="赛事、对阵、地图或日期"
+          />
+        </label>
+        <label>
+          来源核验状态
+          <select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">全部状态</option>
+            <option value="pending">待核验</option>
+            <option value="verified">已核验</option>
+          </select>
+        </label>
+        <button
+          className="text-button"
+          onClick={() => {
+            setQuery("");
+            setStatus("");
+          }}
+        >
+          清除来源筛选
+        </button>
+      </div>
+      <p className="hint">
+        {matches.length} / {catalog.matches.length} 场 ·
+        来源核验不等于教学或复现已验证。
+      </p>
+      <div className="table-scroll">
+        <table className="data-table compact-table" aria-label="比赛来源核验">
+          <thead>
+            <tr>
+              <th scope="col">比赛 / 地图</th>
+              <th scope="col">日期</th>
+              <th scope="col">来源状态</th>
+              <th scope="col">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {matches.map((m) => (
+              <tr key={m.id}>
+                <th scope="row" className="table-title">
+                  {m.source.match}
+                  <small>
+                    {m.map.replace("de_", "")} · {m.source.event}
+                  </small>
+                </th>
+                <td className="nowrap">{m.source.date || "未知"}</td>
+                <td className="nowrap">
+                  {m.source.verified ? "来源已核对" : "来源待核验"}
+                </td>
+                <td>
+                  <div className="table-actions">
+                    {m.source.url && (
+                      <a href={m.source.url} target="_blank" rel="noreferrer">
+                        比赛来源
+                      </a>
+                    )}
+                    <button
+                      className="text-button"
+                      aria-expanded={selected === m.id}
+                      aria-controls={`source-${m.id}`}
+                      onClick={() => setSelected(selected === m.id ? "" : m.id)}
+                    >
+                      {selected === m.id ? "收起核验" : "核验来源"}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!matches.length && (
+        <p className="hint" role="status">
+          {catalog.matches.length
+            ? "没有符合筛选条件的比赛。"
+            : "尚未导入比赛。"}
+        </p>
+      )}
+      {editing && (
+        <div id={`source-${editing.id}`}>
+          <SourceReview
+            key={editing.id}
+            initial={editing.source}
+            matchId={editing.id}
+            map={editing.map}
+            client={client}
+            onRefresh={onRefresh}
+          />
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -309,16 +420,25 @@ function PlaceVocabulary({
   catalog,
   client,
   onRefresh,
+  onSelectMap,
+  loadingMaps,
 }: {
   catalog: Catalog;
   client: DataClient;
   onRefresh: () => void;
+  onSelectMap?: (map: string) => void;
+  loadingMaps: string[];
 }) {
   const maps = [...new Set(catalog.matches.map((m) => m.map))].sort();
   const [chosen, setMap] = useState("");
   const map = maps.includes(chosen) ? chosen : maps[0] || "";
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
+  const loaded = !catalog.loaded || catalog.loaded.includes(map);
+  const loading = loadingMaps.includes(map);
+  useEffect(() => {
+    if (map) onSelectMap?.(map);
+  }, [map, onSelectMap]);
   const counts = new Map<string, number>();
   for (const t of catalog.throws)
     if (t.map === map)
@@ -347,7 +467,16 @@ function PlaceVocabulary({
         的地图点位名。社区中文叫法（如“黑屋”）请核对后在这里填写，系统不会自动猜测。右侧的战术区域（A
         区 / B 区 / 中路 / CT 后场）决定 CT 防守研究里的人数统计。
       </p>
-      {counts.size === 0 ? (
+      {!loaded ? (
+        <p className="hint" role="status">
+          {loading ? "正在载入地图区域…" : "地图资料尚未载入。"}
+          {!loading && (
+            <button className="text-button" onClick={() => onSelectMap?.(map)}>
+              重试载入词表
+            </button>
+          )}
+        </p>
+      ) : counts.size === 0 ? (
         <p className="muted">
           这张地图的投掷还没有区域信息。重新导入同一 Demo
           即可补充，不会重复计数。
