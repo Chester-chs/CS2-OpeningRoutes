@@ -953,69 +953,82 @@ export function PracticeShelf({
           在选手区域档案中选择真实回合，保存自己的跟练清单。
         </p>
       )}
-      {rows.map((row) => (
-        <article className="panel" key={row.id} data-testid="practice-card">
-          <h3>{row.title}</h3>
-          {row.steps.map((step, i) => (
-            <label className="practice-step" key={i}>
-              <input
-                type="checkbox"
-                checked={row.checked.includes(i)}
-                onChange={() =>
+      {rows.map((row, index) => (
+        <details
+          className="practice-entry"
+          key={row.id}
+          data-testid="practice-card"
+          open={index === 0}
+        >
+          <summary>
+            <span>{row.title}</span>
+            <span className="practice-progress">
+              {row.steps.filter((_, i) => row.checked.includes(i)).length}/
+              {row.steps.length} 完成
+            </span>
+          </summary>
+          <div className="practice-body">
+            {row.steps.map((step, i) => (
+              <label className="practice-step" key={i}>
+                <input
+                  type="checkbox"
+                  checked={row.checked.includes(i)}
+                  onChange={() =>
+                    update(
+                      rows.map((r) =>
+                        r.id === row.id
+                          ? {
+                              ...r,
+                              checked: r.checked.includes(i)
+                                ? r.checked.filter((n) => n !== i)
+                                : [...r.checked, i],
+                            }
+                          : r,
+                      ),
+                    )
+                  }
+                />
+                {step}
+              </label>
+            ))}
+            <label>
+              跟练笔记
+              <textarea
+                aria-label="跟练笔记"
+                value={row.note}
+                onChange={(e) =>
                   update(
                     rows.map((r) =>
-                      r.id === row.id
-                        ? {
-                            ...r,
-                            checked: r.checked.includes(i)
-                              ? r.checked.filter((n) => n !== i)
-                              : [...r.checked, i],
-                          }
-                        : r,
+                      r.id === row.id ? { ...r, note: e.target.value } : r,
                     ),
                   )
                 }
               />
-              {step}
             </label>
-          ))}
-          <label>
-            跟练笔记
-            <textarea
-              aria-label="跟练笔记"
-              value={row.note}
-              onChange={(e) =>
-                update(
-                  rows.map((r) =>
-                    r.id === row.id ? { ...r, note: e.target.value } : r,
-                  ),
-                )
-              }
-            />
-          </label>
-          <div className="actions">
-            <button
-              className="text-button"
-              onClick={() => openRound(row.round_id)}
-            >
-              打开来源回合
-            </button>
-            <button
-              className="text-button"
-              onClick={() =>
-                openLearning({ profile: row.profile_id, map: row.map })
-              }
-            >
-              返回选手档案
-            </button>
-            <button
-              className="text-button"
-              onClick={() => update(rows.filter((r) => r.id !== row.id))}
-            >
-              移除清单
-            </button>
+            <div className="actions">
+              <button
+                className="text-button"
+                onClick={() => openRound(row.round_id)}
+              >
+                打开来源回合
+              </button>
+              <button
+                className="text-button"
+                onClick={() =>
+                  openLearning({ profile: row.profile_id, map: row.map })
+                }
+              >
+                返回选手档案
+              </button>
+              <button
+                className="text-button"
+                onClick={() => update(rows.filter((r) => r.id !== row.id))}
+              >
+                移除清单
+              </button>
+            </div>
           </div>
-        </article>
+        </details>
       ))}
       {error && <p role="alert">{error}</p>}
     </section>

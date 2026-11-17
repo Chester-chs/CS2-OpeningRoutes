@@ -16,6 +16,24 @@ export default function Plans({
 }) {
   const [editing, setEditing] = useState<Plan | null>(null);
   const [message, setMessage] = useState("");
+  const [query, setQuery] = useState("");
+  const [side, setSide] = useState("");
+  const [status, setStatus] = useState("");
+  const [selected, setSelected] = useState("");
+  const visible = catalog.plans.filter(
+    (p) =>
+      (!side || p.side === side) &&
+      (!status || p.status === status) &&
+      [p.title, p.area, p.purpose, p.conditions]
+        .join(" ")
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()),
+  );
+  const statusNames: Record<string, string> = {
+    draft: "草稿",
+    published: "已发布",
+    withdrawn: "已撤回",
+  };
   const empty = (): Plan => ({
     id: crypto.randomUUID(),
     title: "",
@@ -30,8 +48,8 @@ export default function Plans({
   });
   return (
     <>
-      <div className="section-line">
-        <p className="muted">将真实投掷整理成抢占、延缓、反清与反制方案。</p>
+      <div className="section-line plan-toolbar">
+        <p className="hint">将真实投掷整理成抢占、延缓、反清与反制方案。</p>
         {client.mode === "desktop" && (
           <button
             className="button secondary"
@@ -51,61 +69,173 @@ export default function Plans({
           <p>投掷顺序、角色、条件和反制需要结合比赛逐项整理。</p>
         </div>
       )}
-      {catalog.plans.map((p) => (
-        <article className="panel plan" key={p.id}>
-          <div className="section-line">
-            <h2>{p.title}</h2>
-            <span className={`side ${p.side}`}>{p.side}</span>
-          </div>
-          <p>
-            {p.area} · {p.purpose}
-          </p>
-          <p className="muted">条件：{p.conditions}</p>
-          <ol>
-            {p.steps.map((s, i) => {
-              const t = catalog.throws.find((t) => t.id === s.throw_id);
-              return (
-                <li key={i}>
-                  <button
-                    className="text-button"
-                    onClick={() => openThrow(s.throw_id)}
-                  >
-                    {s.time}s · {s.role} · {t?.player}{" "}
-                    {t ? kindNames[t.kind] : ""}
-                  </button>
-                  <p>{s.followup}</p>
-                </li>
-              );
-            })}
-          </ol>
-          {p.counter_ids.length > 0 && (
-            <p>
-              关联反制：
-              {p.counter_ids
-                .map(
-                  (id) =>
-                    catalog.plans.find((v) => v.id === id)?.title ||
-                    "关联方案未公开",
-                )
-                .join("、")}
-            </p>
-          )}
-          {p.counter_explanation && (
-            <p>反制条件与解释：{p.counter_explanation}</p>
-          )}
-          {client.mode === "desktop" && (
+      {catalog.plans.length > 0 && (
+        <>
+          <div className="list-filters" role="search" aria-label="方案筛选">
+            <label className="list-search">
+              搜索方案
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="名称、区域、目的或条件"
+              />
+            </label>
+            <label>
+              方案阵营
+              <select value={side} onChange={(e) => setSide(e.target.value)}>
+                <option value="">全部阵营</option>
+                <option value="T">T</option>
+                <option value="CT">CT</option>
+              </select>
+            </label>
+            <label>
+              方案状态
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                <option value="">全部状态</option>
+                {Object.entries(statusNames).map(([id, name]) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
-              className="button secondary"
+              className="text-button"
               onClick={() => {
-                setEditing(structuredClone(p));
-                setMessage("");
+                setQuery("");
+                setSide("");
+                setStatus("");
               }}
             >
-              编辑方案
+              清除方案筛选
             </button>
+          </div>
+          <p className="hint">
+            {visible.length} / {catalog.plans.length} 套方案 ·
+            展开查看时机、步骤和反制依据。
+          </p>
+          <div className="table-scroll">
+            <table
+              className="data-table compact-table"
+              aria-label="控图与反制方案"
+            >
+              <thead>
+                <tr>
+                  <th scope="col">方案</th>
+                  <th scope="col">区域 / 阵营</th>
+                  <th scope="col" className="num">
+                    步骤
+                  </th>
+                  <th scope="col">状态</th>
+                  <th scope="col">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((p) => (
+                  <tr key={p.id}>
+                    <th scope="row" className="table-title">
+                      {p.title}
+                      <small>{p.purpose}</small>
+                    </th>
+                    <td>
+                      {p.area}
+                      <small className={`side ${p.side}`}>{p.side}</small>
+                    </td>
+                    <td className="num">{p.steps.length}</td>
+                    <td className="nowrap">
+                      {statusNames[p.status] || p.status}
+                    </td>
+                    <td>
+                      <div className="table-actions">
+                        <button
+                          className="text-button"
+                          aria-expanded={selected === p.id}
+                          aria-controls={`plan-${p.id}`}
+                          onClick={() =>
+                            setSelected(selected === p.id ? "" : p.id)
+                          }
+                        >
+                          {selected === p.id ? "收起步骤" : "查看步骤"}
+                        </button>
+                        {client.mode === "desktop" && (
+                          <button
+                            className="text-button"
+                            onClick={() => {
+                              setEditing(structuredClone(p));
+                              setMessage("");
+                            }}
+                          >
+                            编辑方案
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!visible.length && (
+            <p className="hint" role="status">
+              没有符合筛选条件的方案。
+            </p>
           )}
-        </article>
-      ))}
+        </>
+      )}
+      {visible
+        .filter((p) => p.id === selected)
+        .map((p) => (
+          <section
+            className="plan plan-detail"
+            key={p.id}
+            id={`plan-${p.id}`}
+            aria-label="方案详情"
+          >
+            <div className="section-line">
+              <h2>{p.title}</h2>
+              <span className={`side ${p.side}`}>{p.side}</span>
+            </div>
+            <p>
+              {p.area} · {p.purpose}
+            </p>
+            <p className="muted">条件：{p.conditions}</p>
+            <ol>
+              {p.steps.map((s, i) => {
+                const t = catalog.throws.find((t) => t.id === s.throw_id);
+                return (
+                  <li key={i}>
+                    <button
+                      className="text-button"
+                      onClick={() => openThrow(s.throw_id)}
+                    >
+                      {s.time}s · {s.role} · {t?.player}{" "}
+                      {t ? kindNames[t.kind] : ""}
+                    </button>
+                    <p>{s.followup}</p>
+                  </li>
+                );
+              })}
+            </ol>
+            {p.counter_ids.length > 0 && (
+              <p>
+                关联反制：
+                {p.counter_ids
+                  .map(
+                    (id) =>
+                      catalog.plans.find((v) => v.id === id)?.title ||
+                      "关联方案未公开",
+                  )
+                  .join("、")}
+              </p>
+            )}
+            {p.counter_explanation && (
+              <p>反制条件与解释：{p.counter_explanation}</p>
+            )}
+          </section>
+        ))}
       {editing && (
         <section className="panel editor">
           <h2>整理配合与反制</h2>

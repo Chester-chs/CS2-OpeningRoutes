@@ -2005,3 +2005,180 @@ caption {
 .link-cell:focus-visible {
   outline-offset: -2px;
 }
+
+/* Secondary pages share the compact lists used by discovery and openings. */
+.list-filters {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 8px 0;
+}
+.list-filters label {
+  min-width: 100px;
+}
+.list-filters .list-search {
+  flex: 1;
+  min-width: 180px;
+}
+.list-filters > button {
+  min-height: 30px;
+}
+.compact-table {
+  min-width: 500px;
+}
+.compact-table .table-title {
+  min-width: 140px;
+  max-width: 460px;
+  overflow-wrap: anywhere;
+}
+.compact-table .table-title small {
+  display: block;
+  margin-top: 2px;
+}
+.compact-table small {
+  color: var(--muted);
+  font-weight: 400;
+}
+.compact-table small.side {
+  display: inline-block;
+}
+.table-actions {
+  display: flex;
+  gap: 4px 12px;
+  flex-wrap: wrap;
+  min-width: 64px;
+}
+.table-actions > * {
+  white-space: nowrap;
+}
+.plan-detail {
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  margin: 10px 0;
+}
+.plan-toolbar .button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.plan-detail p,
+.plan-detail li {
+  margin-top: 4px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+.manage-grid {
+  gap: 12px;
+}
+.manage-grid > .panel {
+  padding: 10px 12px;
+  border-color: var(--line);
+}
+.manage-grid .section-line select {
+  width: auto;
+  min-width: 120px;
+  max-width: 55%;
+}
+.manage-grid .file-zone {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 4px 12px;
+  min-height: 52px;
+  margin: 10px 0;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+.manage-grid .file-zone:focus-within,
+.file-button:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.manage-grid .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 8px 0;
+}
+.manage-grid .form-grid label:has(input[type="url"]) {
+  grid-column: 1 / -1;
+}
+.manage-grid .job {
+  padding: 8px 0;
+}
+.manage-grid .job strong {
+  overflow-wrap: anywhere;
+}
+.manage-grid .export-box {
+  margin-top: 12px;
+  padding-top: 12px;
+}
+.manage-grid .export-box p {
+  margin-bottom: 8px;
+}
+.source-review {
+  padding: 12px 0 0;
+  border-bottom: 0;
+  border-top: 1px solid var(--line);
+}
+.source-review .check-label {
+  margin: 8px 0;
+}
+.saved-tools {
+  margin: 8px 0;
+}
+.practice-shelf {
+  margin-top: 18px;
+}
+.practice-entry {
+  border-bottom: 1px solid var(--line);
+}
+.practice-entry:first-of-type {
+  border-top: 1px solid var(--line);
+}
+.practice-entry > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px;
+  cursor: pointer;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+.practice-entry > summary::-webkit-details-marker {
+  display: none;
+}
+.practice-entry > summary::before {
+  content: "▸";
+  color: var(--muted);
+}
+.practice-entry[open] > summary::before {
+  content: "▾";
+}
+.practice-entry > summary:hover {
+  background: var(--surface-2);
+}
+.practice-progress {
+  margin-left: auto;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+.practice-body {
+  padding: 0 8px 10px;
+}
+.practice-shelf .practice-step {
+  margin: 6px 0;
+}
+@media (max-width: 760px) {
+  .list-filters .list-search {
+    flex-basis: 100%;
+  }
+  .list-filters label:not(.list-search) {
+    flex: 1;
+  }
+  .list-filters > button {
+    flex-basis: 100%;
+    text-align: left;
+  }
+}
